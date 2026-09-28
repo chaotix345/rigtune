@@ -35,7 +35,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.UnaryOperator;
+import java.util.function.BiFunction;
 
 // Stutter Doctor (docs/v0.4/SPEC.md 5): the opt-in session monitor (settings.json stutterMonitor), stutter.json and the
 // analysis behind StutterScreen. RealController delegates every C4 stutter method here in one line; StutterHooks calls
@@ -67,7 +67,7 @@ public final class StutterService {
 	}
 
 	// For StutterFixGameTest (AC5.12): the analysis the game test stands in for the capture's (null: the capture's own).
-	static volatile @Nullable UnaryOperator<StutterAnalyzer.Result> analysisProbe;
+	static volatile @Nullable BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> analysisProbe;
 
 	// Render thread.
 	private boolean analysing;
@@ -530,9 +530,9 @@ public final class StutterService {
 				c.source(), HardwareProbe.minecraftVersion(), c.collector(), Runtime.getRuntime().maxMemory() / MIB,
 				hw == null || hw.totalRamMb() <= 0 ? null : hw.totalRamMb(), Runtime.getRuntime().availableProcessors(), c.phaseTiming(), waits,
 				c.gcMeasured()));
-		UnaryOperator<StutterAnalyzer.Result> probe = analysisProbe;
+		BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> probe = analysisProbe;
 		if (probe != null) {
-			result = probe.apply(result);
+			result = probe.apply(result, c.startNanos());
 		}
 		List<StutterAdvisor.Fired> advice = m.rules() == null || hw == null ? List.of()
 				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()),

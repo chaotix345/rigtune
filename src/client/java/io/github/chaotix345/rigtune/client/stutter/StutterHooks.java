@@ -14,7 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import org.jspecify.annotations.Nullable;
 
-import java.util.function.UnaryOperator;
+import java.util.function.BiFunction;
 
 // The Stutter Doctor's Minecraft side (docs/v0.4/SPEC.md 5): the Fabric events it listens to, registered once by
 // RigTuneClient (StutterMonitor.install), and the per-tick work. Every listener returns at once while nothing captures.
@@ -207,10 +207,10 @@ public final class StutterHooks {
 		return SettingsWatch.cost(minecraft, calls);
 	}
 
-	// For StutterFixGameTest (docs/v0.5/SPEC.md 5, AC5.12): stands the given analysis in for the capture's own (its input is
-	// the real one); null puts the real analysis back. Everything after the analysis (the advice, the offers, Apply, the
-	// tracking) runs as in play.
-	public static void injectAnalysis(@Nullable UnaryOperator<StutterAnalyzer.Result> probe) {
+	// For StutterFixGameTest (docs/v0.5/SPEC.md 5, AC5.12): stands the given analysis in for the capture's own (given the
+	// real one and the capture's start, System.nanoTime); null puts the real analysis back. Everything after the analysis
+	// (the advice, the offers, Apply, the tracking) runs as in play.
+	public static void injectAnalysis(@Nullable BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> probe) {
 		StutterService.analysisProbe = probe;
 	}
 

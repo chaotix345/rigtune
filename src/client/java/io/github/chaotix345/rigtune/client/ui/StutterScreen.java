@@ -174,6 +174,23 @@ public class StutterScreen extends Screen {
 		return list;
 	}
 
+	// The fix rows' buttons in list order ("Try this fix…"; "Undo this change…", "Dismiss"), for the game tests.
+	public List<Button> fixButtons() {
+		List<Button> out = new ArrayList<>();
+		if (list != null) {
+			for (Row row : list.children()) {
+				if (row instanceof ButtonRow b) {
+					out.addAll(b.buttons());
+				}
+			}
+		}
+		return out;
+	}
+
+	public @Nullable Component status() {
+		return status;
+	}
+
 	private void populate(StutterList l, int width) {
 		shownText.clear();
 		String statusKey = view.recording() ? (view.paused() ? "rigtune.stutter.status.paused" : "rigtune.stutter.status.recording")

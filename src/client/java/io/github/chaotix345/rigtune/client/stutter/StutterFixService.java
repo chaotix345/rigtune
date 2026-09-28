@@ -56,6 +56,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -335,7 +336,8 @@ public final class StutterFixService {
 		}
 		RulesDocument rules = c.rules();
 		String entryId = ChangeRecorder.newEntryId();
-		Instant appliedAt = Instant.now();
+		// To the second, as a session's startedAt is (StutterCapture): the session restarted below starts no earlier.
+		Instant appliedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 		FixTracker.Record record = new FixTracker.Record(entryId, offer.adviceId(), offer.key(), offer.from(), offer.to(), appliedAt,
 				rules == null ? 0 : rules.revision, offer.now(), offer.now() ? FixTracker.State.MEASURING : FixTracker.State.STAGED, shown.outcome(),
 				shown.conditions(), null, 0, null, null, false);
