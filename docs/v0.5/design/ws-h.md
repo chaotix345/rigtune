@@ -334,3 +334,19 @@ Other owners' files, each edit marked in the code: `ApplyExecutor` (WS-L2: `star
 `OutsideChanges`, `FirstRunService`, `TryItService` (one JournalCache line each).
 With PERF-1, "WS-H adds no init work" holds again: preLaunch's history.json read is the reconcile's, as before RW-20.
 
+## review-12 fixes
+
+Branch `fix/v05-r12-ws-h`, from feat/v0.5.0 ac109a2d. Each MEDIUM had a test that failed on the old code first.
+
+| id | commit | fix | the test that failed first |
+|---|---|---|---|
+| R12APPLY-1 (M) | 97e752f0 | Undo's cancel of staged changes keeps a group RigTune's records show started, as Discard does: `UndoPlanner.StagedGroups` (started: `ApplyExecutor.startedGroups`; held: `ApplyExecutor.held` when `HelperLauncher.holds` the policy) from `Staging.stagedGroups`, through `UndoService.plan/planEntry/undo` | `UndoSafetyTest.undoWaitsForAnUpdateTheKilledHelperFinished` (the finished update was DISCARDED, never undoable) |
+| R12APPLY-2 (M) | 97e752f0 | Discard and the queued-update drop key ops as `startedGroups` does (`op:<id>` without a group); `keptGroup` says what was kept | `ApplyExecutorCrashReplayTest.aDiscardKeepsAnUngroupedDisableTheHelperDid` (the done "Disable Foo" was DISCARDED under a "kept" status) |
+| R12APPLY-3 (M) | 97e752f0 | A half-done or started group the next exit holds (LAUNCHER/PENDING): Undo skips it with `rigtune.undo.reason.held_partly` (the player's choice on RigTune's screen, not a restart) and no longer holds up the rest of its entry; Discard keeps it with `rigtune.status.discarded_with_held` (`_with_kept_and_held` when an unheld one was kept too). ws-l2.md's residual line corrected (marked) | `UndoSafetyTest.aHeldHalfDoneGroupNeverBlocksTheRestOfItsEntry` (the staged setting was blocked by "waits for a restart"), `discardKeepsAHeldHalfDoneGroupAndSaysItWaitsForAChoice` |
+| R12APPLY-5 (L) | 6a92580a | preLaunch runs the journal (the RW-20 relabel) before it reads the result the title toast shows (`RigTunePreLaunch.readAtStart`) | `PreLaunchResultTest.theToastsResultIsTheRelabelledOne` |
+| notes | 6a92580a | `startedGroups`' comment names the rule it uses; `PreLaunchStaleOpsTest`'s comment names its kill point | - |
+
+R12APPLY-4 and R12APPLY-6 aren't WS-H's (ws-l2, ws-s2). Other owners' files, each edit marked: `UndoPlanner` (the
+StagedGroups input), `UndoService`, `RealController.discardPending` (passes the policy), `RigTunePreLaunch`,
+`ApplyExecutor` (a comment), `TestExecutors` (`killedAfterMarking`), ws-l2.md (one residual line).
+
