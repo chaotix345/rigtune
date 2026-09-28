@@ -354,3 +354,12 @@ first against skeletons that compiled but didn't act (the red messages below), t
 
 Words: `rigtune.tryit.cause.terrain_loading`, `rigtune.tryit.note.unrecorded`, `.note.fresh_world`, `.note.dh_generating`;
 `stage.history_unreadable` and `notice.history` reworded (92 keys in the block now).
+
+## Review-11 fixes (branch `fix/v05-r11-ws-t`, from feat/v0.5.0 at ce7dff57)
+
+| id | result | commit | the test that failed first / evidence |
+|---|---|---|---|
+| APPLY-4 (M) | FIXED | bcd6c45d (cherry-picked from 24946fa8, first made on fix/v05-try-it-2 after its merge) | `TryItServiceTest.onlyChangesTheNextExitAppliesMakeARestartTryWait` failed on the old rule ("pending.json exists"): a Sodium try was refused with only held mod-file ops staged (`expected: <null> but was: <Translatable[key=rigtune.tryit.refused.pending ...]>`), then passed. Triable's PENDING is now "the next exit would apply something": pending.json's ops minus `ApplyExecutor.held` when `HelperLauncher.holds(policy)`. The render thread only stats the file (its time and size with the policy are the cache key); the read runs on the chain, at each derive and after the stat shows a change; until then a changed file counts as waiting (never a wrong "go"); an unreadable file counts as waiting. |
+| PERF-5 (L) | FIXED | 37e49c7b | `TryItNoticeSource.current()` returns before `controller.settingLabels()` while no try is open or its runs are under way (the conditions `TryItText.notice` answers null for). No test: review. |
+| COMPAT-2 | honoured, no code change | 0e4dc4c5 | ws-b's `Difference.BACKEND`/`GPU` reach `TryItVerdict.causes` through `BenchmarkTrend.differences`: `TryItVerdictTest.anotherGraphicsBackendOrGpuMeansNoVerdict` (OpenGL/iGPU before, Vulkan/dGPU after: `Condition(BACKEND)`, NOT_COMPARABLE; same backend, another GPU: `Condition(GPU)`; a run without them: no cause; no setting's allowed differences include either) and `TryItTextTest.theGraphicsCausesAreNamed` ("graphics backend", "GPU") pass as they are. |
+| BENCH-6 | ws-b's | | ws-b fixed it in BenchmarkController (91d863d8); this branch doesn't touch that file. |
