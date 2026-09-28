@@ -103,6 +103,24 @@ class FixTrackerTest {
 		assertEquals(1, r.skipped());
 	}
 
+	// review-12 R12STUTTER-7: the key missing at both ends because its mod was removed reads as the mods changing (MODS wins),
+	// not "RigTune couldn't read" it; missing on one side only stays UNREAD.
+	@Test
+	void aRemovedModIsTheModsNotAnUnreadKey() {
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		Map<String, String> without = new LinkedHashMap<>(s.atEnd().settings());
+		without.remove(RD);
+		FixConditions e = s.atEnd();
+		FixConditions gone = new FixConditions(e.mc(), "other-mods", e.heapMaxMb(), e.collector(), e.width(), e.height(), e.fullscreen(), e.world(),
+				e.phaseTiming(), e.gcMeasured(), without);
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), gone,
+				gone, false), at(60));
+		assertEquals(new FixTracker.Skip(FixConditions.Reason.MODS.id(), List.of()), r.lastSkip());
+		r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), gone,
+				false), at(60));
+		assertEquals(new FixTracker.Skip(FixTracker.UNREAD, List.of(RD)), r.lastSkip(), "missing at the end only");
+	}
+
 	// C20 review L12: a fix that expired because its journal entry is gone has nothing left to undo; one that expired by
 	// age keeps its Undo; undone and not-applied fixes have none.
 	@Test

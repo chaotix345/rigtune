@@ -168,9 +168,12 @@ public final class FixTracker {
 			return r;
 		}
 		String atStart = session.atStart().settings().get(r.key());
-		if (atStart == null || session.atEnd().settings().get(r.key()) == null) {
-			// Unknown (a config file mid-write), never "replaced".
-			Record skipped = r.skip(new Skip(UNREAD, List.of(r.key())));
+		String atEnd = session.atEnd().settings().get(r.key());
+		if (atStart == null || atEnd == null) {
+			// Unknown (a config file mid-write), never "replaced". Missing at both ends is usually its mod removed: the
+			// session's own reason (MODS) wins then (review-12 R12STUTTER-7).
+			Skip why = atStart == null && atEnd == null ? skip(r, session) : null;
+			Record skipped = r.skip(why != null ? why : new Skip(UNREAD, List.of(r.key())));
 			return skipped.skipped() >= MAX_SKIPPED ? skipped.withState(State.EXPIRED) : skipped;
 		}
 		if (!SettingValues.same(atStart, r.to()) && SettingValues.same(atStart, r.from())
