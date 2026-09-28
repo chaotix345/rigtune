@@ -94,6 +94,11 @@ Two more modes (Phase 5):
   - Why not vg §1.5's generated seed of v010-dh's shape: 0.2.0 and later cancel their own update of a mod whose build
     waits in mods/update (`queued_update_dropped`), so the old side drops that group itself. The held group is the
     hand-over they do keep.
+- **`tools/e2e/dhnote/`** (AC3f.4, local only; `docs/v0.5/verification/server/dh-note/`): `dh_server_note.py` runs a
+  Fabric server through `dh-server.init.gradle`'s Loom production server task (127.0.0.1, a free ephemeral port, never
+  25565) and one `e2eClient` with Distant Horizons driven by `DhServerDriver`. It does three server starts on one world:
+  view distance 16, then 6, then 6 with DH on the server. Run it under the game-test lock and two build slots, with a
+  `--work` folder of at most 80 characters (DH's SQLite files go deep under it).
 - **Downgrade and a full journal.** The downgrade instance keeps the newest 46 composed journal entries, plus every entry
   a staged op belongs to. The old versions keep 50 and add up to 2 of their own. Over the cap they evict the entries with
   nothing left to undo first, which would take the checked Undo-last pair with them. compat040 reads each set's journal

@@ -47,6 +47,10 @@ On Windows the LAN detector saw the host at its LAN interface address (`192.168.
 - The game runs in `tools/ci/offline.sh`'s namespace. While its multicast route `224.0.0.0/4 dev lo` named no source address, the pinger's packets left with source 0.0.0.0, the product keyed the host as `lan:0.0.0.0`, and the first CI run (36361989137), which asserted 127.0.0.1 (SPEC 1a's wording), failed on this alone.
 - The route now names `src 127.0.0.1` (the coordinator's decision): run [36377856700](https://github.com/chaotix345/rigtune/actions/runs/36377856700) detected `127.0.0.1:<port>` on all 3 legs, both joins each, with MulticastCheck "received from 127.0.0.1". The CI check is 127.0.0.1 again.
 
+## The Distant Horizons note (AC3f.4)
+
+One local run with a Fabric server on a free port and DH on the client, then on the server too: `dh-note/README.md`. Both claims were confirmed, and the note lost its two "may"s.
+
 ## Stays UNVERIFIED
 
 - **A second PC's Open-to-LAN host.** Its integrated server authenticates guests, and the one-client rule applies.

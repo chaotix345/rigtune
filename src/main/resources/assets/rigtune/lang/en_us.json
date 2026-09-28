@@ -80,7 +80,7 @@
 	"rigtune.share.unavailable": "Nothing to copy yet: the report is still being built.",
 	"rigtune.server.cap_reason": "The server sends at most %s chunks.",
 	"rigtune.server.detail.changed": "This server's limit changed since last time (was %s).",
-	"rigtune.server.detail.dh": "Distant Horizons may still show terrain you've already explored beyond it; generating new distant terrain may need Distant Horizons on the server.",
+	"rigtune.server.detail.dh": "Distant Horizons still shows terrain you've already explored beyond it; generating new distant terrain needs Distant Horizons on the server.",
 	"rigtune.server.detail.simulation": "Simulation distance on this server: %s chunks (the server decides it).",
 	"rigtune.server.detail.you_set": "You set %1$s; the server sends %2$s, so %2$s is what you see.",
 	"rigtune.server.notice": "The server limits view distance to %s chunks",
