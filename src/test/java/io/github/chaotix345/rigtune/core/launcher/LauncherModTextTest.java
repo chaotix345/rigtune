@@ -124,7 +124,7 @@ class LauncherModTextTest {
 				Map.entry("modrinth_app.add", "this instance → Content → Browse content, then install it there."),
 				Map.entry("modrinth_app.update", "this instance → Content → select it → Update (or Update all)."),
 				Map.entry("modrinth_app.disable", "this instance → Content → select it → Disable."),
-				Map.entry("modrinth_app.enable", "this instance → Content → filter Disabled → select it → Enable."),
+				Map.entry("modrinth_app.enable", "this instance → Content → filter State → Disabled → select it → Enable."),
 				Map.entry("modrinth_app.self_update",
 						"update RigTune in this instance's Content tab, or download it and use Content → Upload files, then delete the old RigTune there."),
 				Map.entry("prism.add", "right-click this instance → Edit... → Mods → Download Mods."),

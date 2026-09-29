@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // docs/v0.5/SPEC.md 4g (AC4g.1, AC4g.2's unit part): what an older RigTune's mod-file changes left for the launcher to
 // catch up with, from RigTune's own records only (history.json, the mods folder), and the notice's text per launcher.
 class LauncherRepairTest {
+	static final String WHY = "An older RigTune changed these mods without the launcher, so its list of mods is out of date.";
+
 	final UndoPlannerTest.FakeState folder = new UndoPlannerTest.FakeState();
 	final List<JournalChange> changes = new ArrayList<>();
 
@@ -157,14 +159,18 @@ class LauncherRepairTest {
 		}
 	}
 
-	// AC4g.2: Copy list holds only file names, one per line, hidden characters escaped.
+	// AC4g.2, #20: Copy steps holds the title, the steps, then the files they name: file names only, one per line, hidden
+	// characters escaped.
 	@Test
-	void theCopyListHoldsFileNamesOnlyEscaped() {
+	void copyStepsHoldsTheStepsThenFileNamesOnlyEscaped() {
 		Findings findings = new Findings(List.of(new Pair("a", "a-1\u202e.jar.disabled", "a-2.jar"), new Pair("b", "b-1.jar.disabled", "b-2.jar")),
 				List.of("x.jar"), List.of("c.jar.disabled"));
 
-		assertEquals("a-1\\u202e.jar.disabled\nb-1.jar.disabled", LauncherRepair.copyList(findings, Launcher.MODRINTH_APP));
-		assertEquals("c.jar.disabled", LauncherRepair.copyList(findings, Launcher.ATLAUNCHER));
+		for (Launcher launcher : List.of(Launcher.MODRINTH_APP, Launcher.ATLAUNCHER)) {
+			String steps = LauncherRepair.message(launcher).english() + "\n\n" + LauncherRepair.detail(findings, launcher).english() + "\n\n";
+			assertEquals(steps + (launcher == Launcher.ATLAUNCHER ? "c.jar.disabled" : "a-1\\u202e.jar.disabled\nb-1.jar.disabled"),
+					LauncherRepair.copySteps(findings, launcher).english(), launcher.name());
+		}
 	}
 
 	@Test
@@ -172,13 +178,13 @@ class LauncherRepairTest {
 		Findings findings = new Findings(List.of(new Pair("a", "a-1.jar.disabled", "a-2.jar"), new Pair("b", "b-1.jar.disabled", "b-2.jar")),
 				List.of("x.jar", "y.jar"), List.of());
 
-		assertEquals("Mod changes from an older RigTune: help Modrinth App catch up", LauncherRepair.message(Launcher.MODRINTH_APP).english());
+		assertEquals("Fix the Modrinth App's mod list", LauncherRepair.message(Launcher.MODRINTH_APP).english());
 		String detail = LauncherRepair.detail(findings, Launcher.MODRINTH_APP).english();
-		assertEquals("Do this in the Modrinth App, not in File Explorer (the app keeps its own list): open this instance → Content → filter"
-				+ " Disabled → select the old copy → Delete: a-1.jar.disabled, b-1.jar.disabled. RigTune's newer versions stay. If an old copy"
-				+ " isn't listed, the app has already hidden it: nothing to do. Or, to let the app own every file: delete the new copy, update"
-				+ " the old one, then switch it on. RigTune also added: x.jar, y.jar. The app lists them as your own files and will update"
-				+ " them itself; nothing to do.", detail);
+		assertEquals(WHY + " With the game closed, for each old copy (a-1.jar.disabled, b-1.jar.disabled), start in the Modrinth App: open"
+				+ " this instance → Content. If it's listed there, switched off (filter State → Disabled), delete it; RigTune's newer version"
+				+ " stays. If it isn't listed, it still blocks Update all: delete RigTune's newer copy of that mod in Content, rename the old"
+				+ " copy from .jar.disabled to .jar in the instance's mods folder, press Refresh in Content, then Update it. RigTune also"
+				+ " added: x.jar, y.jar. The app lists them as your own files and will update them itself; nothing to do.", detail);
 	}
 
 	@Test
@@ -186,18 +192,19 @@ class LauncherRepairTest {
 		Findings pairs = new Findings(List.of(new Pair("a", "a-1.jar.disabled", "a-2.jar")), List.of(), List.of());
 		Findings disabled = new Findings(List.of(), List.of(), List.of("c.jar.disabled"));
 
-		assertTrue(LauncherRepair.detail(pairs, Launcher.PRISM).english().startsWith("In Prism Launcher: Edit... → Mods → select the old disabled"
+		assertTrue(LauncherRepair.detail(pairs, Launcher.PRISM).english().startsWith(WHY + " In Prism Launcher: Edit... → Mods → select the old disabled"
 				+ " copy → Remove, before any Check for Updates: a-1.jar.disabled."), LauncherRepair.detail(pairs, Launcher.PRISM).english());
-		assertTrue(LauncherRepair.detail(pairs, Launcher.GDLAUNCHER).english().startsWith("In GDLauncher: Mods → the old disabled copy → Delete:"
+		assertTrue(LauncherRepair.detail(pairs, Launcher.GDLAUNCHER).english().startsWith(WHY + " In GDLauncher: Mods → the old disabled copy → Delete:"
 				+ " a-1.jar.disabled."), LauncherRepair.detail(pairs, Launcher.GDLAUNCHER).english());
 		assertTrue(LauncherRepair.detail(pairs, Launcher.CURSEFORGE).english().contains("a-1.jar.disabled"));
-		assertTrue(LauncherRepair.detail(disabled, Launcher.ATLAUNCHER).english().startsWith("ATLauncher doesn't list the mods RigTune disabled:"
+		assertTrue(LauncherRepair.detail(disabled, Launcher.ATLAUNCHER).english().startsWith(WHY + " ATLauncher doesn't list the mods RigTune disabled:"
 				+ " c.jar.disabled."), LauncherRepair.detail(disabled, Launcher.ATLAUNCHER).english());
 		for (Launcher generic : List.of(Launcher.MULTIMC, Launcher.OFFICIAL, Launcher.UNKNOWN)) {
-			assertTrue(LauncherRepair.detail(pairs, generic).english().startsWith("In the launcher that keeps this instance's list of mods, remove"
+			assertTrue(LauncherRepair.detail(pairs, generic).english().startsWith(WHY + " In the launcher that keeps this instance's list of mods, remove"
 					+ " the old disabled copies: a-1.jar.disabled."), generic.name());
 		}
-		assertEquals("Mod changes from an older RigTune: help your launcher catch up", LauncherRepair.message(Launcher.UNKNOWN).english());
+		assertEquals("Fix your launcher's mod list", LauncherRepair.message(Launcher.UNKNOWN).english());
+		assertEquals("Fix Prism Launcher's mod list", LauncherRepair.message(Launcher.PRISM).english());
 		for (Launcher launcher : Launcher.values()) {
 			assertAllKeysAreRepairKeys(LauncherRepair.detail(pairs, launcher));
 		}

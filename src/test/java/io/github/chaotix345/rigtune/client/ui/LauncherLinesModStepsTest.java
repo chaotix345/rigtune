@@ -98,7 +98,7 @@ class LauncherLinesModStepsTest {
 		UndoPlan.Item turnedOff = UndoPlan.Item.of(Text.of("rigtune.undo.item.disable", "Disable %s", "indium.jar"), UndoPlan.Action.SKIP, reason, false,
 				List.of("c2"), List.of());
 		assertEquals("In the Modrinth App: this instance → Content → select it → Disable.", LauncherLines.undoStepsLine(added).getString());
-		assertEquals("In the Modrinth App: this instance → Content → filter Disabled → select it → Enable.",
+		assertEquals("In the Modrinth App: this instance → Content → filter State → Disabled → select it → Enable.",
 				LauncherLines.undoStepsLine(turnedOff).getString());
 		Text yours = Text.of("rigtune.undo.reason.launcher_managed", "This instance's mods are managed by %s: change it there",
 				LauncherModText.nameOrYours(LauncherInfo.UNKNOWN));

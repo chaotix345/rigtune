@@ -142,7 +142,7 @@ class LauncherRepairServiceTest {
 		assertNotNull(notice);
 		assertEquals(LauncherRepairService.HELD_KEY, notice.key());
 		assertEquals(NoticePriority.HELD_MOD_CHANGES, notice.priority());
-		assertEquals("1 mod change(s) from an earlier Apply are waiting: Modrinth App manages this instance's mods.", notice.message().english());
+		assertEquals("1 mod change(s) from an earlier Apply are waiting: the Modrinth App manages this instance's mods.", notice.message().english());
 		assertEquals(List.of("cancel", "apply"), notice.actions().stream().map(NoticeAction::id).toList());
 		assertEquals(List.of("Cancel them", "Let RigTune apply them"), notice.actions().stream().map(a -> a.label().english()).toList());
 		assertFalse(notice.dismissible());
@@ -201,7 +201,7 @@ class LauncherRepairServiceTest {
 		ops.add(patch);
 		PendingActions.create(1, mods, config, ops).save(pending);
 		assertNotNull(held());
-		assertEquals("2 mod change(s) from an earlier Apply are waiting: Modrinth App manages this instance's mods.", held().message().english());
+		assertEquals("2 mod change(s) from an earlier Apply are waiting: the Modrinth App manages this instance's mods.", held().message().english());
 
 		service.heldAction(LauncherRepairService.CANCEL);
 
@@ -335,7 +335,8 @@ class LauncherRepairServiceTest {
 				JournalChange.file(JournalChange.ENABLE, "lithium", "lithium-2.jar", JournalChange.APPLIED, "le", "lg")));
 	}
 
-	// AC4g.2's unit half: only under LAUNCHER and with a finding; Copy list puts the file names only on the clipboard.
+	// AC4g.2's unit half: only under LAUNCHER and with a finding; Copy steps puts the title, the steps and the file names (no
+	// path) on the clipboard (#20).
 	@Test
 	void theRepairNoticeUnderLauncher() throws IOException {
 		appliedPair();
@@ -346,15 +347,15 @@ class LauncherRepairServiceTest {
 		assertNotNull(notice);
 		assertEquals(NoticePriority.LAUNCHER_REPAIR, notice.priority());
 		assertTrue(notice.key().startsWith(LauncherRepair.KEY_PREFIX), notice.key());
-		assertEquals("Mod changes from an older RigTune: help Modrinth App catch up", notice.message().english());
-		assertTrue(notice.detail().english().contains("Delete: sodium-0.7.0.jar.disabled."), notice.detail().english());
+		assertEquals("Fix the Modrinth App's mod list", notice.message().english());
+		assertTrue(notice.detail().english().contains("for each old copy (sodium-0.7.0.jar.disabled),"), notice.detail().english());
 		assertTrue(notice.detail().english().contains("RigTune also added: fastquit.jar."), notice.detail().english());
 		assertTrue(notice.dismissible());
-		assertEquals(List.of("Copy list"), notice.actions().stream().map(a -> a.label().english()).toList());
+		assertEquals(List.of("Copy steps"), notice.actions().stream().map(a -> a.label().english()).toList());
 
 		service.repairAction(LauncherRepairService.COPY);
 
-		assertEquals(List.of("sodium-0.7.0.jar.disabled"), clipboard);
+		assertEquals(List.of(notice.message().english() + "\n\n" + notice.detail().english() + "\n\nsodium-0.7.0.jar.disabled"), clipboard);
 	}
 
 	@Test

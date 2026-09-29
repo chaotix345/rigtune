@@ -4,6 +4,8 @@ import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.model.Text;
 
 import java.nio.charset.StandardCharsets;
@@ -118,15 +120,17 @@ public final class LauncherRepair {
 		return launcher == Launcher.ATLAUNCHER ? !findings.disabledOnly().isEmpty() : !findings.pairs().isEmpty();
 	}
 
-	// Copy list: the files the steps name, one per line: names only (the mods folder's path holds the account name), with
-	// hidden characters escaped.
-	public static String copyList(Findings findings, Launcher launcher) {
+	// Copy steps (#20): the title, the steps, then the files they name, one per line, for a text editor next to the
+	// launcher (the game is closed while the player works there). Names only (the mods folder's path holds the account
+	// name), with hidden characters escaped; a literal per name, since a shown literal loses its line breaks.
+	public static Text copySteps(Findings findings, Launcher launcher) {
 		List<String> names = launcher == Launcher.ATLAUNCHER ? findings.disabledOnly() : findings.pairs().stream().map(Pair::oldFile).toList();
-		return String.join("\n", names.stream().map(LogSafe::text).toList());
+		return Text.join("\n\n", message(launcher), detail(findings, launcher),
+				Text.join("\n", names.stream().map(name -> Text.literal(LogSafe.text(name))).toList()));
 	}
 
 	public static Text message(Launcher launcher) {
-		return Text.of("rigtune.repair.message", "Mod changes from an older RigTune: help %s catch up", name(launcher));
+		return Text.of("rigtune.repair.message", "Fix %s's mod list", name(launcher));
 	}
 
 	public static Text detail(Findings findings, Launcher launcher) {
@@ -134,14 +138,13 @@ public final class LauncherRepair {
 		String disabled = String.join(", ", findings.disabledOnly().stream().map(LogSafe::text).toList());
 		String added = String.join(", ", findings.added().stream().map(LogSafe::text).toList());
 		List<Text> parts = new ArrayList<>();
+		parts.add(Text.of("rigtune.repair.why", "An older RigTune changed these mods without the launcher, so its list of mods is out of date."));
 		switch (launcher) {
-			case MODRINTH_APP -> {
-				parts.add(Text.of("rigtune.repair.steps.modrinth_app", "Do this in the Modrinth App, not in File Explorer (the app keeps its own list):"
-						+ " open this instance → Content → filter Disabled → select the old copy → Delete: %s. RigTune's newer versions stay. If an old"
-						+ " copy isn't listed, the app has already hidden it: nothing to do.", old));
-				parts.add(Text.of("rigtune.repair.fallback.modrinth_app", "Or, to let the app own every file: delete the new copy, update the old one,"
-						+ " then switch it on."));
-			}
+			case MODRINTH_APP -> parts.add(Text.of("rigtune.repair.steps.modrinth_app", "With the game closed, for each old copy (%s), start in the"
+					+ " Modrinth App: open this instance → Content. If it's listed there, switched off (filter State → Disabled), delete it;"
+					+ " RigTune's newer version stays. If it isn't listed, it still blocks Update all: delete RigTune's newer copy of that mod in"
+					+ " Content, rename the old copy from .jar.disabled to .jar in the instance's mods folder, press Refresh in Content, then"
+					+ " Update it.", old));
 			case PRISM -> parts.add(Text.of("rigtune.repair.steps.prism", "In Prism Launcher: Edit... → Mods → select the old disabled copy → Remove,"
 					+ " before any Check for Updates: %s. RigTune's newer versions stay.", old));
 			case GDLAUNCHER -> parts.add(Text.of("rigtune.repair.steps.gdlauncher", "In GDLauncher: Mods → the old disabled copy → Delete: %s. RigTune's"
@@ -167,11 +170,10 @@ public final class LauncherRepair {
 		return Text.sentences(parts.toArray(Text[]::new));
 	}
 
-	// The launcher's name inside a sentence: "your launcher" when the evidence is packwiz metadata and the launcher
-	// itself doesn't keep a list (the official launcher, an unknown one).
+	// The launcher's name inside a sentence, with its article ("the Modrinth App"): "your launcher" when the evidence is
+	// packwiz metadata and the launcher itself doesn't keep a list (the official launcher, an unknown one).
 	public static Text name(Launcher launcher) {
-		return launcher == Launcher.UNKNOWN || launcher == Launcher.OFFICIAL
-				? Text.of("rigtune.repair.launcher.generic", "your launcher") : Text.literal(launcher.displayName());
+		return LauncherModText.nameOrYours(LauncherInfo.of(launcher));
 	}
 
 	// How many mod changes the held ops are, as History shows them: per group, an update's disable and enable are one.

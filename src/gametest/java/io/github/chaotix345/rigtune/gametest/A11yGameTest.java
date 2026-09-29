@@ -1631,7 +1631,7 @@ public class A11yGameTest implements FabricClientGameTest {
 				context.waitTicks(3);
 				tabUntilNarrates(context, "notice screen, held " + name, heldMessage);
 				String repairSaid = tabUntilNarrates(context, "notice screen, repair " + name, repairMessage);
-				check(repairSaid.contains("select the old copy"), "the repair notice's steps are narrated with it: " + repairSaid);
+				check(repairSaid.contains("for each old copy"), "the repair notice's steps are narrated with it: " + repairSaid);
 				context.takeScreenshot("a11y-launcher-notices-" + name);
 			}
 		} finally {
