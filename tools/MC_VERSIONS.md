@@ -53,7 +53,7 @@ Background and the evidence behind the policy: docs/research/v0.3/mc-versions.md
 5. Review the version-specific rules (`vulkan-backend`, `ixeris`, `vulkanmod`, the
    `mixintrace-reborn` ignore note) and regenerate the rules for every supported version
    (`python tools/update_rules.py`, then `rules/REVIEW.md`).
-6. Update the docs and the changelog (README, DESIGN, the Modrinth body, CHANGELOG; optionally
+6. Update the docs and the changelog (README, docs/guide/, DESIGN, the Modrinth body, CHANGELOG; optionally
    `KnowledgeV2ScenarioTest`'s version list). Run `./gradlew "Reset active project"`, check
    `git diff`, and commit on a feature branch.
 7. Tag a release. CI builds and publishes every node.

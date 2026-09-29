@@ -78,7 +78,7 @@ Launcher detection happens on your PC only, from a few named launcher properties
 
 ## What's been tested
 
-Recommendations are estimates. Everything measured was measured on one PC (Ryzen 7 7800X3D, Radeon RX 7800 XT, 32 GB); for other hardware RigTune picks settings from its hardware tables, and automated tests check that the rules give the intended recommendations on hardware it wasn't run on, not that they make the game faster there. The thresholds behind the one-click fixes, Try it's noise floor and the launch-time alerts come from that PC and one player's play and launches. Server features were tested against a local server (not the real Realms service); the battery offer was tested with simulated batteries and on a real laptop. A benchmark on your own PC is the stronger evidence. Details are in the [README](https://github.com/chaotix345/rigtune#what-has-been-verified).
+Recommendations are estimates. Everything measured was measured on one PC (Ryzen 7 7800X3D, Radeon RX 7800 XT, 32 GB); for other hardware RigTune picks settings from its hardware tables, and automated tests check that the rules give the intended recommendations on hardware it wasn't run on, not that they make the game faster there. The thresholds behind the one-click fixes, Try it's noise floor and the launch-time alerts come from that PC and one player's play and launches. Server features were tested against a local server (not the real Realms service); the battery offer was tested with simulated batteries and on a real laptop. A benchmark on your own PC is the stronger evidence. Details are in the [README](https://github.com/chaotix345/rigtune/blob/main/docs/guide/verification.md).
 
 ## Source and credits
 
