@@ -2,6 +2,23 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
+## v0.5.1: RELEASED 2026-09-29 (UTC)
+- Fixes from the user's field check (Modrinth App 0.21.6, laptop): issues #17-#25, all closed.
+  - PR #26: Modrinth App repair steps that work in 0.21.6 (listed copy: delete it; unlisted: delete the newer copy, rename `.jar.disabled` → `.jar`, Refresh, Update), the notice's title and Copy steps (#17, #18, #20); rules r18.
+  - PR #27: toast counts per change (#21), first Apply's automatic Preset note (#22), no privacy toast over benchmark results (#23), Arc `\d{3}T` integrated tier 3 and "shared memory" (#24); rules r19.
+  - PR #29: docs for #19 and #25. PR #30: the README cut to ~900 words; the detail moved to docs/guide/ and CONTRIBUTING.md.
+- Release run 36530247606: attempt 1 failed only `e2e / stutter script (26.2)` (the evaluator's chunk-loading contiguity, issue #33; no stutter code changed since 0.5.0); attempt 2 green, publish and verify included.
+  - GitHub release v0.5.1 (both jars and sources jars; notes in the v0.5.0 format).
+  - Modrinth oBN6pcGa: 0.5.1+mc26.2 (5Zq8LVfK), 0.5.1+mc26.3 (FqlSEw70), listed. sync-body pushed docs/modrinth/body-0.5.md. The project is still processing (moderator review).
+  - Rules r19 live on main (raw rules-v1.json and rules-v2.json return 200 at revision 19).
+- Repo setup (2026-09-29):
+  - Rulesets: "main" (no deletion or force-push, PR required with 0 approvals, merge commits only, required check `ci-ok`, admin bypass only through a PR); "release tags" (`v*`: create, update or delete by admins only).
+  - Settings: merge commits only, branches deleted on merge, auto-merge on. Actions: default token read-only, can't approve PRs, only GitHub-owned and `gradle/actions/*` actions. Dependabot alerts and security updates on, private vulnerability reporting on.
+  - Files: build.yml `ci-ok` (PR #28), SECURITY.md, dependabot.yml (Actions only, grouped monthly; first PR #31, download-artifact v8, merged).
+- The user doesn't want Claude attribution in commits or PR descriptions. It was removed from every PR description; the commits already on main keep it.
+- Local only: `FrameHookBudgetTest`'s "can't see a 2x regression" self-check failed in full local builds while this PC was low on memory; it passed alone and in every CI run.
+- Next: #33 (stutter_run evaluator); a Modrinth downloads badge once the project is approved (its API returns 404 while it's in review).
+
 ## v0.5.0: RELEASED 2026-09-28 (UTC)
 - PR #13 (feat/v0.5.0) merged to main as a20c8eac; main CI 36446997261 green on attempt 1.
   - The release PR first exposed two test-only flakes, both fixed before the merge: the stutter dev script's AFK throttling (DevStutter reports input; stutter_run's chunk-loading rule is judged first to last) and the returning-player gate's single sample (limit still 80 ms; one re-measure in a new JVM, only on a returningAdded* failure).
