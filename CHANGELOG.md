@@ -6,6 +6,8 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-29
+
 ### Fixed
 - **The Modrinth App repair steps work in the app as it is now (0.21.6).** Its Content tab has no "Disabled" filter unless a listed mod is switched off, and a mod the app installed since 0.21 vanishes from Content once RigTune 0.1-0.4 renamed it, while its `.disabled` copy still blocks Update all. The notice now gives both cases per old copy: delete it in Content if it's listed; if it isn't, delete RigTune's newer copy in Content, rename the old one from `.jar.disabled` to `.jar` in the mods folder, press Refresh, then Update. The fallback that no longer worked is gone, and the Modrinth App's "switch it on" step names the State filter.
 - Rules revision 18: the warning RigTune 0.1-0.4 shows about launcher-managed mods gives the same working steps.
