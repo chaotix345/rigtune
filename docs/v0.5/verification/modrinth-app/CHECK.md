@@ -30,8 +30,12 @@ Desktop. Take one wherever you see **[shot]**.
 
 ## 3. Update all in the app
 1. Back in the app, open the instance's **Content** and press **Update all**.
-2. What we expect: it fails, with a message like **"The updated filename belongs to another content item"**. **[shot]**
-3. Please write down the exact message you see.
+2. What we expect: it fails as a whole with **"Couldn't prepare instance"**, and details like **"Invalid input:
+   Restore or repair mods/<old>.jar before updating this instance; its current content cannot be backed up
+   safely"**. **[shot]**
+3. Note the app's version and press the failed task's **Copy details** (or similar) to copy the
+   exact text.
+4. Please write down the exact message you see, and paste in what Copy details gave you.
 
 ## 4. Switch to RigTune 0.5
 1. Before you start the game, open the instance folder (**Open folder**, then `mods`) and take a picture of the file
@@ -47,8 +51,12 @@ Desktop. Take one wherever you see **[shot]**.
 5. Look at the `mods` folder again: the file list should match the picture from 4.1. **[shot]**
 
 ## 5. Follow the steps, then Update all again
-1. In the app: **Content**, filter **Disabled**, select each old copy the notice named, and **Delete**.
-2. Press **Update all** again. What we expect: it works now. **[shot]**
+1. In the app: **Content**'s Disabled filter is gone; there's a **State** filter instead, but it only appears once
+   Content lists both enabled and disabled items for the instance — the old copies here won't be listed at all.
+2. For each old copy the notice named: delete RigTune's newer copy in **Content**, then in File Explorer rename
+   `<old>.jar.disabled` back to `<old>.jar` in the instance's `mods` folder.
+3. Back in **Content**, press **Refresh**: the old version reappears, with an update available.
+4. Press **Update all**. What we expect: it works now. **[shot]**
 
 ## 6. Send the files, then delete the instance
 1. In the instance folder, select **`logs`**, **`config`** and **`screenshots`**.
@@ -58,7 +66,7 @@ Desktop. Take one wherever you see **[shot]**.
 
 ## What to tell us
 For each step: what you saw (the exact message in step 3), whether it matched "what we expect", and anything that was
-confusing. Send the ZIP and the screenshots over however is easiest.
+confusing. Send the ZIP however is easiest; screenshots can simply be sent in chat.
 
 Not part of this check: the app's "Sync game options". It's an app-wide setting that could copy game options into
 your usual instance, so we never ask you to turn it on. Its effect stays unverified in the running app.
