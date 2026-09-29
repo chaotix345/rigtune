@@ -52,24 +52,37 @@ class StartupNoticesTest {
 	@Test
 	void thePrivacyToastIsOnlyShownOverTheTitleScreen() {
 		StartupNotices.PrivacyToast toast = new StartupNotices.PrivacyToast();
-		assertFalse(toast.onTitleScreen(), "not taken yet");
+		assertFalse(toast.onTitleScreen(false), "not taken yet");
 		toast.take(true);
-		assertTrue(toast.onTitleScreen());
-		assertFalse(toast.onTitleScreen(), "shown once");
+		assertTrue(toast.onTitleScreen(false));
+		assertFalse(toast.onTitleScreen(false), "shown once");
 
 		assertTrue(toast.onRigTuneScreen(true), "still on screen when the RigTune screen opens: hide it");
 		assertFalse(toast.onRigTuneScreen(false));
-		assertTrue(toast.onTitleScreen(), "shown again on the next title screen");
+		assertTrue(toast.onTitleScreen(false), "shown again on the next title screen");
 
 		assertFalse(toast.onRigTuneScreen(false), "it had run its course");
-		assertFalse(toast.onTitleScreen());
+		assertFalse(toast.onTitleScreen(false));
+	}
+
+	// #23: leaving the benchmark world passes a title screen before its results open; the toast waits for a real one.
+	@Test
+	void thePrivacyToastWaitsOutTheBenchmarkWorldsHandOff() {
+		StartupNotices.PrivacyToast toast = new StartupNotices.PrivacyToast();
+		toast.take(true);
+		assertFalse(toast.onTitleScreen(true), "not over a hand-off title screen");
+		assertTrue(toast.onTitleScreen(false));
+
+		assertTrue(toast.onRigTuneScreen(true));
+		assertFalse(toast.onTitleScreen(true), "the benchmark world is being left");
+		assertTrue(toast.onTitleScreen(false), "shown on the next real title screen");
 	}
 
 	@Test
 	void thePrivacyToastIsNeverShownWhenItWasntTaken() {
 		StartupNotices.PrivacyToast toast = new StartupNotices.PrivacyToast();
 		toast.take(false);
-		assertFalse(toast.onTitleScreen());
+		assertFalse(toast.onTitleScreen(false));
 		assertFalse(toast.onRigTuneScreen(true));
 	}
 }

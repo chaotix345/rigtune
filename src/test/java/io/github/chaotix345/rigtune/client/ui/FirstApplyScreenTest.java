@@ -72,6 +72,15 @@ class FirstApplyScreenTest {
 				items(view(setting("c1", JournalChange.APPLIED), setting("c2", JournalChange.APPLIED)), false, ModFilesPolicy.RIGTUNE));
 	}
 
+	// #22: the game's own switch to Preset custom is a note outside the count, so the section agrees with Apply's status.
+	@Test
+	void theGamesPresetSwitchIsANoteOutsideTheCount() {
+		HistoryModel.Change preset = new HistoryModel.Change(HistoryModel.Row.SETTING, List.of("c3"), JournalChange.APPLIED, "Preset", "fancy", "custom",
+				null, null, null, null, null, true);
+		assertEquals(List.of("status", "section section.now 2", "change c1", "change c2", "note preset_auto", "note no_restart", "note undo_hint"),
+				items(view(setting("c1", JournalChange.APPLIED), setting("c2", JournalChange.APPLIED), preset), false, ModFilesPolicy.RIGTUNE));
+	}
+
 	@Test
 	void someAtTheNextRestart() {
 		assertEquals(List.of("status", "section section.now 1", "change c1", "section section.restart 2", "change c2", "change c3", "note restart",

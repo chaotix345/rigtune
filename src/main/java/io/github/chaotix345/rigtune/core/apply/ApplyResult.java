@@ -6,7 +6,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public record ApplyResult(String finishedAt, List<OpResult> results) {
 	public enum Status {
@@ -22,8 +25,9 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 		}
 	}
 
-	// docs/v0.5/SPEC.md 4f: what the next start's toasts count. applied: OK or done already; failed: FAILED (still pending,
-	// retried at exit); dropped: ABANDONED.
+	// docs/v0.5/SPEC.md 4f: what the next start's toasts count, in changes as History and Apply count them (#21): an update's
+	// disable and enable (one group, applied all-or-nothing) are one. A group is failed when an op of it FAILED (still
+	// pending, retried at exit), else dropped when one was ABANDONED, else applied (OK or done already).
 	public record Counts(int applied, int failed, int dropped) {
 		public int total() {
 			return applied + failed + dropped;
@@ -35,20 +39,46 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 	}
 
 	public Counts counts() {
+		Map<String, List<OpResult>> groups = new LinkedHashMap<>();
+		for (int i = 0; i < results.size(); i++) {
+			OpResult r = results.get(i);
+			if (r != null) {
+				String group = r.op() == null ? null : r.op().group();
+				groups.computeIfAbsent(group != null ? "group:" + group : "op:" + i, k -> new ArrayList<>()).add(r);
+			}
+		}
 		int applied = 0;
 		int failed = 0;
 		int dropped = 0;
-		for (OpResult r : results) {
-			if (r == null) {
-				continue;
-			}
-			switch (r.status() == null ? Status.FAILED : r.status()) {
-				case OK, SKIPPED_ALREADY_DONE -> applied++;
-				case FAILED -> failed++;
-				case ABANDONED -> dropped++;
+		for (List<OpResult> group : groups.values()) {
+			int changes = changes(group);
+			if (group.stream().anyMatch(r -> r.status() == null || r.status() == Status.FAILED)) {
+				failed += changes;
+			} else if (group.stream().anyMatch(r -> r.status() == Status.ABANDONED)) {
+				dropped += changes;
+			} else {
+				applied += changes;
 			}
 		}
 		return new Counts(applied, failed, dropped);
+	}
+
+	// As LauncherRepair.modChanges: a group's disables and enables pair up; a config patch is a change of its own.
+	private static int changes(List<OpResult> group) {
+		int enables = 0;
+		int disables = 0;
+		int other = 0;
+		for (OpResult r : group) {
+			PendingActions.Type type = r.op() == null ? null : r.op().type();
+			if (type == PendingActions.Type.ENABLE_FILE) {
+				enables++;
+			} else if (type == PendingActions.Type.DISABLE_FILE) {
+				disables++;
+			} else {
+				other++;
+			}
+		}
+		return Math.max(enables, disables) + other;
 	}
 
 	public boolean allSucceeded() {

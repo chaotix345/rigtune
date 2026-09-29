@@ -240,7 +240,11 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		check(history != null && !history.entries().isEmpty() && history.entries().getFirst().id().equals(entryId),
 				"the confirmation is for the entry Apply journaled (the newest): " + entryId);
 		List<String> grouped = new ArrayList<>();
-		List<String> statuses = history.entries().getFirst().changes().stream().map(HistoryModel.Change::status).toList();
+		// #22: the game's own switch to Preset custom is a note, not a row.
+		List<HistoryModel.Change> changes = history.entries().getFirst().changes();
+		boolean presetAuto = changes.stream().anyMatch(c -> c.automatic() && JournalChange.APPLIED.equals(c.status()));
+		List<String> statuses = changes.stream().filter(c -> !(c.automatic() && JournalChange.APPLIED.equals(c.status())))
+				.map(HistoryModel.Change::status).toList();
 		statuses.stream().filter(JournalChange.APPLIED::equals).forEach(grouped::add);
 		statuses.stream().filter(JournalChange.STAGED::equals).forEach(grouped::add);
 		statuses.stream().filter(s -> !JournalChange.APPLIED.equals(s) && !JournalChange.STAGED.equals(s)).forEach(grouped::add);
@@ -254,6 +258,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 			check(screen.changeStatuses().equals(grouped), "the rows' statuses are the entry's, grouped: " + screen.changeStatuses() + " vs " + grouped);
 			List<String> notes = screen.notes();
 			check(notes.contains("rigtune.firstrun.applied.restart") == staged, "the restart note iff a row waits for the restart: " + notes);
+			check(notes.contains("rigtune.firstrun.applied.preset_auto") == presetAuto, "the preset note iff the game switched Preset itself: " + notes);
 			check(notes.contains("rigtune.firstrun.applied.no_restart") == (!staged && !downloading && !undone && inEffect && !screen.failuresReported()),
 					"no restart needed iff none waits, nothing downloads, failed or was undone, and a row is in effect: " + notes);
 			check(notes.contains("rigtune.firstrun.applied.downloading") == downloading, "the downloading note iff downloads run: " + notes);
