@@ -128,7 +128,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
       - name: The new jars (the calling run's, never rebuilt)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
           path: ${{ runner.temp }}/new
@@ -222,7 +222,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
       - name: The new jars (the calling run's, never rebuilt)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
           path: ${{ runner.temp }}/new
@@ -288,7 +288,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
       - name: The new jars (the calling run's, never rebuilt)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
           path: ${{ runner.temp }}/new

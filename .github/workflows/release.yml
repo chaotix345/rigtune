@@ -157,7 +157,7 @@ jobs:
           exit 1
 
       - name: The staged release files (the jars the E2E tested)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: release-files
           path: ${{ runner.temp }}/release-files
