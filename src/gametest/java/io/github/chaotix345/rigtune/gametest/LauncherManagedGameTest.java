@@ -540,7 +540,7 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			check(count(status, "rigtune.status.restart") == 0 && count(status, "rigtune.repair.held.status") == 1,
 					"the held group is said apart, never as 'restart to apply': " + status.getString());
 			check(heldNotice.priority() == NoticePriority.HELD_MOD_CHANGES && !heldNotice.dismissible(), "the held notice: " + heldNotice);
-			check(heldNotice.message().english().equals("1 mod change(s) from an earlier Apply are waiting: Modrinth App manages this instance's mods."),
+			check(heldNotice.message().english().equals("1 mod change(s) from an earlier Apply are waiting: the Modrinth App manages this instance's mods."),
 					heldNotice.message().english());
 			for (int[] size : V05TestContext.SIZES) {
 				v05.resize(size[0], size[1], size[2]);
@@ -549,15 +549,16 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			}
 			v05.resize(1280, 720, 2);
 
-			// AC4g.2: the repair notice, its Copy list (names only) and Dismiss.
+			// AC4g.2: the repair notice, its Copy steps (the steps, then the file names only; #20) and Dismiss.
 			Notice repair = waitForNotice(context, real, repairKey);
 			check(repair.priority() == NoticePriority.LAUNCHER_REPAIR && repair.dismissible(), "the repair notice: " + repair);
 			String detail = Objects.requireNonNull(repair.detail()).english();
 			check(detail.contains("rigtunetestpair-" + run + "-1.0.jar.disabled") && detail.contains("rigtunetestadded-" + run + "-1.0.jar"), detail);
 			context.runOnClient(mc -> mc.keyboardHandler.setClipboard(""));
 			context.runOnClient(mc -> real.noticeAction(repairKey, LauncherRepairService.COPY));
-			String copied = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard());
-			check(copied.equals("rigtunetestpair-" + run + "-1.0.jar.disabled"), "Copy list puts the file names only on the clipboard: '" + copied + "'");
+			String copied = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard()).replace("\r\n", "\n");
+			check(copied.equals(repair.message().english() + "\n\n" + detail + "\n\nrigtunetestpair-" + run + "-1.0.jar.disabled"),
+					"Copy steps puts the title, the steps and the file names on the clipboard: '" + copied + "'");
 			context.runOnClient(mc -> real.dismissNotice(repairKey));
 			check(find(notices(context, real), repairKey) == null, "the repair notice is gone once dismissed");
 
@@ -599,7 +600,7 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			check(ClientSettings.load(config).modFilesByRigTune, "settings.json has the opt-in");
 			check(find(notices(context, real), LauncherRepairService.HELD_KEY) == null, "no held notice once RigTune may change the mod files");
 			RigTune.LOGGER.info("LauncherManagedGameTest: held changes (notice, Cancel them, Let RigTune apply them, the leftover toasts) and the"
-					+ " repair notice (text, Copy list, Dismiss) checked");
+					+ " repair notice (text, Copy steps, Dismiss) checked");
 		} finally {
 			// The files first: later classes must never see the seeds, whatever fails below.
 			restore(pending, pendingBefore);

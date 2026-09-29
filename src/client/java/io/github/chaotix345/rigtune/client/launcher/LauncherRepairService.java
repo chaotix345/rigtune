@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.HelperToasts;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.probe.Probes;
+import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.ModsFolder;
 import io.github.chaotix345.rigtune.client.undo.Staging;
@@ -268,13 +269,13 @@ public final class LauncherRepairService {
 			return null;
 		}
 		return new Notice(findings.key(launcher), NoticePriority.LAUNCHER_REPAIR, LauncherRepair.message(launcher),
-				LauncherRepair.detail(findings, launcher), List.of(new NoticeAction(COPY, Text.of("rigtune.repair.copy", "Copy list"))), true);
+				LauncherRepair.detail(findings, launcher), List.of(new NoticeAction(COPY, Text.of("rigtune.repair.copy", "Copy steps"))), true);
 	}
 
 	public void repairAction(String actionId) {
 		State current = state;
 		if (COPY.equals(actionId) && current != null && current.findings() != null) {
-			env().clipboard().accept(LauncherRepair.copyList(current.findings(), env().launcher().get()));
+			env().clipboard().accept(Texts.component(LauncherRepair.copySteps(current.findings(), env().launcher().get())).getString());
 		}
 	}
 
