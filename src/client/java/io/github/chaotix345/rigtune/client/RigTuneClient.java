@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
 import io.github.chaotix345.rigtune.client.probe.Probes;
@@ -205,7 +206,7 @@ public final class RigTuneClient implements ClientModInitializer {
 			// v0.5 L6 (X8): the flag is saved through SettingsSaver.
 			PRIVACY_TOAST.take(StartupNotices.takePrivacyNotice(settings, configDir));
 		}
-		if (PRIVACY_TOAST.onTitleScreen()) {
+		if (PRIVACY_TOAST.onTitleScreen(BenchmarkWorld.busy())) {
 			SystemToast.add(minecraft.gui.toastManager(), PRIVACY_ID, Component.translatable("rigtune.settings.privacy_toast.title"),
 					Component.translatable("rigtune.settings.privacy_toast.body"));
 		}

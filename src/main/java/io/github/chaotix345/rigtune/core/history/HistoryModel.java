@@ -19,6 +19,8 @@ import java.util.Set;
 // values go through Labels, as the Undo screen shows them.
 public final class HistoryModel {
 	private static final String PREFIX = "rigtune.history.";
+	private static final String PRESET_KEY = "vanilla.graphicsPreset";
+	private static final String PRESET_CUSTOM = "custom";
 	private static final Set<String> STATUSES = Set.of(JournalChange.APPLIED, JournalChange.STAGED, JournalChange.ABANDONED,
 			JournalChange.DISCARDED, JournalChange.REVERTED);
 	private static final Map<String, String> KINDS = Map.of(JournalEntry.APPLY, "apply", JournalEntry.BENCHMARK, "benchmark",
@@ -60,10 +62,17 @@ public final class HistoryModel {
 
 	// before/after: shown values, null when the key was absent. failure: why its op wasn't applied at the last exit.
 	// name (docs/v0.4/SPEC.md 2c): the mod's display name when staging recorded it (an update: the new jar's), else null.
+	// automatic (#22): the game's own switch of Preset to custom, which it makes when single settings change; no setting the
+	// player picked, so the settings count leaves it out.
 	public record Change(Row row, List<String> changeIds, String status, String label, String before, String after, String file, String newFile,
-			String modId, Failure failure, String name) {
+			String modId, Failure failure, String name, boolean automatic) {
 		public Change {
 			changeIds = List.copyOf(changeIds);
+		}
+
+		public Change(Row row, List<String> changeIds, String status, String label, String before, String after, String file, String newFile,
+				String modId, Failure failure, String name) {
+			this(row, changeIds, status, label, before, after, file, newFile, modId, failure, name, false);
 		}
 
 		public Change(Row row, List<String> changeIds, String status, String label, String before, String after, String file, String newFile,
@@ -108,11 +117,11 @@ public final class HistoryModel {
 		}
 
 		public int settings() {
-			return (int) changes.stream().filter(c -> c.row() == Row.SETTING).count();
+			return (int) changes.stream().filter(c -> c.row() == Row.SETTING && !c.automatic()).count();
 		}
 
 		public int mods() {
-			return changes.size() - settings();
+			return (int) changes.stream().filter(c -> c.row() != Row.SETTING).count();
 		}
 	}
 
@@ -185,7 +194,8 @@ public final class HistoryModel {
 			}
 			if (c.isSetting()) {
 				out.add(new Change(Row.SETTING, List.of(c.id()), c.status(), c.key() == null ? "?" : labels.label(c.key()),
-						shown(labels, c.key(), c.before()), shown(labels, c.key(), c.after()), null, null, null, failure(c, failures)));
+						shown(labels, c.key(), c.before()), shown(labels, c.key(), c.after()), null, null, null, failure(c, failures), null,
+						PRESET_KEY.equals(c.key()) && PRESET_CUSTOM.equals(c.after())));
 				continue;
 			}
 			JournalChange partner = partner(c, changes, paired);

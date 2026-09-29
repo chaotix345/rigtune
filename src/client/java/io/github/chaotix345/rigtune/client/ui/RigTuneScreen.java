@@ -289,11 +289,15 @@ public class RigTuneScreen extends Screen {
 		HardwareProfile hw = report.hardware();
 		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
 				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), Palette.of(COLOR_LABEL)));
-		lines.add(Component.translatable("rigtune.header.gpu",
-				value(hw.gpu().renderer()),
-				value(gb(hw.gpu().vramMb())),
-				value(backendName(hw.gpu().backend())),
-				value(Integer.toString(report.tier().gpuTier()))).withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
+		// #24: an integrated GPU shares the RAM; the driver's dedicated figure (2 GB for a 16 GB Arc 130T) would mislead.
+		lines.add((report.gpuClass().integrated()
+				? Component.translatable("rigtune.header.gpu.shared", value(hw.gpu().renderer()), value(backendName(hw.gpu().backend())),
+						value(Integer.toString(report.tier().gpuTier())))
+				: Component.translatable("rigtune.header.gpu",
+						value(hw.gpu().renderer()),
+						value(gb(hw.gpu().vramMb())),
+						value(backendName(hw.gpu().backend())),
+						value(Integer.toString(report.tier().gpuTier())))).withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
 		MutableComponent online = report.online()
 				? Component.translatable("rigtune.header.online").withStyle(s -> s.withColor(Palette.of(COLOR_OK)))
 				: Component.translatable("rigtune.header.offline").withStyle(ChatFormatting.GOLD);

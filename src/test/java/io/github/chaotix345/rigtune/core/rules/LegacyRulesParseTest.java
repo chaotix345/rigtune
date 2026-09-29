@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -32,6 +33,8 @@ class LegacyRulesParseTest {
 
 	// docs/v0.5/SPEC.md "Compatibility promise" (0.2.x/0.3.x), AC5.2: the main-list advice the release revision R adds over r16.
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of(OldClientWarningTest.ID);
+	// #24: the GPU rows added since r16 (0.2.0-0.4.0 read them like any other row; rules-v1 leaves them out).
+	static final List<String> GPU_TIERS_ADDED_SINCE_R16 = List.of("(?i)Arc(?:\\s*\\(TM\\))?\\s*\\d{3}T\\b");
 	static final String R16 = "/rules/r16/rules-v2.json";
 
 	static String resource(String name) throws IOException {
@@ -97,7 +100,9 @@ class LegacyRulesParseTest {
 		List<String> advice = new java.util.ArrayList<>(r16.advice.stream().map(a -> a.id).toList());
 		advice.addAll(ADVICE_ADDED_SINCE_R16);
 		assertEquals(advice, r.advice.stream().map(a -> a.id).toList());
-		assertEquals(r16.gpuTiers.size(), r.gpuTiers.size());
+		List<String> gpuTiers = r.gpuTiers.stream().map(t -> t.pattern).toList();
+		assertEquals(r16.gpuTiers.stream().map(t -> t.pattern).toList(), gpuTiers.stream().filter(p -> !GPU_TIERS_ADDED_SINCE_R16.contains(p)).toList());
+		assertTrue(gpuTiers.containsAll(GPU_TIERS_ADDED_SINCE_R16), gpuTiers.toString());
 		assertEquals(r16.cpuTiers.size(), r.cpuTiers.size());
 		assertEquals(r16.heapTiers.size(), r.heapTiers.size());
 		JsonObject stripped = JsonParser.parseString(bundledJson()).getAsJsonObject();
