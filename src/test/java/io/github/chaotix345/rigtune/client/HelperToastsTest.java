@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -76,6 +77,32 @@ class HelperToastsTest {
 	@Test
 	void anEmptyResultShowsNothing() {
 		assertTrue(HelperToasts.result(of()).isEmpty());
+	}
+
+	// #21: an update is one change, as History and Apply count it: its disable and enable (one group) count once, by the
+	// group's outcome.
+	private static List<OpResult> update(String mod, Status disable, Status enable) {
+		List<Op> ops = PendingActions.group(Op.disableFile(Path.of("mods", mod + "-1.jar")),
+				Op.enableFile(Path.of("staging", mod + "-2.jar"), Path.of("mods", mod + "-2.jar")));
+		return List.of(new OpResult(ops.get(0), disable, disable.name()), new OpResult(ops.get(1), enable, enable.name()));
+	}
+
+	@Test
+	void anUpdateCountsOnce() {
+		List<OpResult> results = new ArrayList<>(update("modmenu", Status.OK, Status.OK));
+		results.addAll(update("sodium", Status.SKIPPED_ALREADY_DONE, Status.OK));
+
+		assertEquals(List.of("rigtune.toast.applied.title[2]"), titles(HelperToasts.result(new ApplyResult("2026-09-29T10:00:00Z", results))));
+	}
+
+	@Test
+	void anUpdateCountsByItsGroupsOutcome() {
+		List<OpResult> results = new ArrayList<>(update("modmenu", Status.OK, Status.OK));
+		results.addAll(update("sodium", Status.OK, Status.FAILED));
+		results.addAll(update("lithium", Status.ABANDONED, Status.ABANDONED));
+		results.add(result(Status.OK));
+
+		assertEquals(new ApplyResult.Counts(2, 1, 1), new ApplyResult("2026-09-29T10:00:00Z", results).counts());
 	}
 
 	@Test

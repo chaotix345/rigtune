@@ -139,12 +139,21 @@ public class FirstApplyScreen extends Screen {
 		List<HistoryModel.Change> now = new ArrayList<>();
 		List<HistoryModel.Change> restart = new ArrayList<>();
 		List<HistoryModel.Change> undone = new ArrayList<>();
+		boolean presetAuto = false;
 		for (HistoryModel.Change change : entry.changes()) {
+			// #22: the game's own switch to Preset custom is a note, outside the count Apply's status agrees with.
+			if (change.automatic() && JournalChange.APPLIED.equals(change.status())) {
+				presetAuto = true;
+				continue;
+			}
 			(JournalChange.APPLIED.equals(change.status()) ? now : JournalChange.STAGED.equals(change.status()) ? restart : undone).add(change);
 		}
 		section(out, "rigtune.firstrun.applied.section.now", COLOR_APPLIED, now);
 		section(out, "rigtune.firstrun.applied.section.restart", COLOR_STAGED, restart);
 		section(out, "rigtune.firstrun.applied.section.undone", COLOR_REVERTED, undone);
+		if (presetAuto) {
+			out.add(new Item.Note("rigtune.firstrun.applied.preset_auto", COLOR_LABEL));
+		}
 		if (!restart.isEmpty()) {
 			out.add(new Item.Note(RESTART, COLOR_STAGED));
 		} else if (!downloading && !failures && undone.isEmpty() && !now.isEmpty()) {

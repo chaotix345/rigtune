@@ -113,7 +113,8 @@ public final class ShareReport {
 			case VULKAN -> "Vulkan";
 			case UNKNOWN -> "?";
 		});
-		out.append(" · ").append(gb(gpu.vramMb())).append(" VRAM\n");
+		// #24: an integrated GPU's figure is the driver's dedicated share, not its memory (it shares the RAM).
+		out.append(" · ").append(gb(gpu.vramMb())).append(" VRAM").append(report.gpuClass().integrated() ? " (integrated, shares RAM)" : "").append('\n');
 
 		DisplayInfo display = hw.display();
 		out.append("- RAM ").append(gb(hw.totalRamMb())).append(" · heap ").append(gb(hw.maxHeapMb())).append(" · display ");

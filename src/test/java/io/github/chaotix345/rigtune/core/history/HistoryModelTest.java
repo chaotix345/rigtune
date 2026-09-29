@@ -116,6 +116,27 @@ class HistoryModelTest {
 		assertEquals(0, view.entries().getFirst().mods());
 	}
 
+	// #22: the game sets Preset to custom itself when single settings change; that row is automatic, and not one of the
+	// player's settings (Apply's "Applied 12 setting(s)" counts the ones picked).
+	@Test
+	void theGamesOwnPresetSwitchIsAutomaticAndNotCounted() {
+		add("e1", JournalEntry.APPLY, null,
+				setting("vanilla.renderDistance", "16", "12", JournalChange.APPLIED),
+				setting("vanilla.graphicsPreset", "fancy", "custom", JournalChange.APPLIED),
+				file(JournalChange.ENABLE, "lithium", "lithium-0.25.4.jar", JournalChange.STAGED, "g2"));
+		add("u1", JournalEntry.UNDO, "e1", setting("vanilla.graphicsPreset", "custom", "fancy", JournalChange.APPLIED));
+
+		HistoryModel.View view = view(Map.of());
+
+		Entry e1 = view.entries().get(1);
+		assertEquals(List.of(false, true, false), e1.changes().stream().map(HistoryModel.Change::automatic).toList());
+		assertEquals(1, e1.settings());
+		assertEquals(1, e1.mods());
+		Entry undo = view.entries().getFirst();
+		assertFalse(undo.changes().getFirst().automatic(), "putting a preset back is no automatic switch");
+		assertEquals(1, undo.settings());
+	}
+
 	// Review B-L1: a disable + an enable of the same mod in one group is "Updated <mod>".
 	@Test
 	void anUpdateIsOneRow() {
