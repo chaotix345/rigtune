@@ -533,7 +533,7 @@ class GeneratedV05Tests(unittest.TestCase):
         v1_rule = next(a for a in self.v1["advice"] if a["id"] == "old-client-launcher-mods")
         self.assertEqual(v1_rule, dict(rule, when={"always": True}))
         for text in ("Modrinth App", "CurseForge", "ATLauncher", "GDLauncher", "Prism", "Install, Update and Disable",
-                     "Content → Disabled", "RigTune 0.5 leaves mod files to your launcher."):
+                     "from .jar.disabled to .jar", "Refresh", "RigTune 0.5 leaves mod files to your launcher."):
             self.assertIn(text, rule["text"])
         r16_v1 = repo_json("src", "test", "resources", "rules", "r16", "rules-v1.json")
         for new, old in ((self.v2, self.r16), (self.v1, r16_v1)):

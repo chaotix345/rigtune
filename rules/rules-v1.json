@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 17,
-  "generatedAt": "2026-09-27T15:26:22Z",
+  "revision": 18,
+  "generatedAt": "2026-09-29T03:53:00Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1608,7 +1608,7 @@
       "kind": "warning",
       "impact": "medium",
       "title": "If a launcher manages your mods",
-      "text": "Using the Modrinth App, CurseForge, ATLauncher, GDLauncher, or Prism with mod updates? Untick RigTune's Install, Update and Disable items and make those changes in the launcher: RigTune's mod-file changes can make the launcher's updates fail. Already happened? In the Modrinth App: Content → Disabled → delete the old copies. RigTune 0.5 leaves mod files to your launcher."
+      "text": "Using the Modrinth App, CurseForge, ATLauncher, GDLauncher, or Prism with mod updates? Untick RigTune's Install, Update and Disable items and make those changes in the launcher: RigTune's mod-file changes can make the launcher's updates fail. Already happened in the Modrinth App? Per mod, in this instance's Content: delete the old copy if it's listed, switched off. If it isn't listed, delete RigTune's newer copy, rename the old one from .jar.disabled to .jar in the mods folder, press Refresh, then Update. RigTune 0.5 leaves mod files to your launcher."
     }
   ],
   "availability": {
