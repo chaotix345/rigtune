@@ -35,6 +35,7 @@
 		{ "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*Pro\\s*B50\\b", "vendor": "intel", "integrated": false, "tier": 3, "v1": false },
 		{ "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*Pro\\s*B[67]\\d\\b", "vendor": "intel", "integrated": false, "tier": 4, "v1": false },
 		{ "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*(?:\\d{3}V|B3\\d0|Graphics)", "vendor": "intel", "integrated": true, "tier": 3 },
+		{ "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*\\d{3}T\\b", "vendor": "intel", "integrated": true, "tier": 3, "v1": false },
 		{ "pattern": "(?i)Iris(?:\\s*\\(R\\))?\\s*Xe\\s*MAX", "vendor": "intel", "integrated": false, "tier": 2 },
 		{ "pattern": "(?i)Iris(?:\\s*\\(R\\))?\\s*Xe", "vendor": "intel", "integrated": true, "tier": 3 },
 		{ "pattern": "(?i)Iris(?:\\s*\\(R\\))?\\s*(?:Plus|Pro)?\\s*Graphics", "vendor": "intel", "integrated": true, "tier": 2 },

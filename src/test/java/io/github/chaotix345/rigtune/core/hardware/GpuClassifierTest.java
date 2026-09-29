@@ -75,6 +75,7 @@ class GpuClassifierTest {
 			new Case("Intel", "Mesa Intel(R) Arc(TM) Pro B60 Graphics (BMG G21)", GpuVendor.INTEL, false, 4, 4),
 			new Case("Intel", "Intel(R) Arc(TM) B390 Graphics", GpuVendor.INTEL, true, 3, 3),
 			new Case("Intel", "Intel(R) Arc(TM) 140V GPU (16GB)", GpuVendor.INTEL, true, 3, 3),
+			new Case("Intel", "Intel(R) Arc(TM) 130T GPU (16GB)", GpuVendor.INTEL, true, 3, 3),
 			new Case("ATI Technologies Inc.", "AMD Radeon(TM) 8060S Graphics", GpuVendor.AMD, true, 4, 4),
 			new Case("ATI Technologies Inc.", "AMD Radeon(TM) 890M Graphics", GpuVendor.AMD, true, 3, 3),
 			new Case("Apple", "Apple M5", GpuVendor.APPLE, true, 3, 3),

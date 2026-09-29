@@ -39,9 +39,10 @@ public final class StartupNotices {
 			due |= firstTime;
 		}
 
-		// On the title screen: true when the toast should be shown now.
-		public boolean onTitleScreen() {
-			if (!due) {
+		// On the title screen: true when the toast should be shown now. handOff (#23): the benchmark world is opening or
+		// being left, and the title screen is only a step to its results screen, which the toast would cover.
+		public boolean onTitleScreen(boolean handOff) {
+			if (!due || handOff) {
 				return false;
 			}
 			due = false;

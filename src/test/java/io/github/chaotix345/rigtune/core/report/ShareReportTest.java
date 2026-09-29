@@ -122,6 +122,18 @@ class ShareReportTest {
 		assertTrue(text.contains("- RAM 32 GB · heap ? · display ?\n"), text);
 	}
 
+	// #24: an integrated GPU's VRAM figure is its dedicated share; the report says it shares the RAM.
+	@Test
+	void anIntegratedGpuSaysItSharesTheRam() {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.gpu = new GpuInfo("Intel", "Intel(R) Arc(TM) 130T GPU (16GB)", "32.0.101.8132", GraphicsBackend.OPENGL, 2048);
+		Report integrated = new Report(hw.build(), new GpuClass(GpuVendor.INTEL, true, 3, "x"), new TierResult(3, 3, 3, 4, 5, "gpu"), Goal.BALANCED,
+				sample(), 7, "remote", true, Instant.parse("2026-09-29T10:00:00Z"));
+		String text = ShareReport.format(integrated, VERSIONS, null);
+
+		assertTrue(text.contains("- GPU: Intel(R) Arc(TM) 130T GPU (16GB) · driver 32.0.101.8132 · OpenGL · 2.0 GB VRAM (integrated, shares RAM)\n"), text);
+	}
+
 	@Test
 	void displayWithoutRefreshRate() {
 		Fixtures.Hw hw = Fixtures.userRig();

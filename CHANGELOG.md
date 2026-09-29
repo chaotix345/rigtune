@@ -6,6 +6,12 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ## [Unreleased]
 
+### Fixed
+- **Intel Arc 130T and 140T (Arrow Lake-H) are recognised as integrated graphics** (rules revision 19). They matched no GPU row, so RigTune took them for a dedicated Arc card at the Intel fallback tier 2: they now get tier 3, like the Arc 140V, and the integrated-GPU advice (which graphics chip a laptop uses, render scale). For any integrated GPU the header says "shared memory" instead of the driver's dedicated figure (2 GB on a 16 GB laptop), and the share report notes it shares the RAM.
+- "RigTune applied N change(s)" counts an update once, as Apply and History do; it counted its two file steps (2 updates read "4 changes"). "N of M changes failed" counts the same way.
+- Your first Apply: the game's own switch of Preset to Custom (it makes it when single settings change) is a note, not a counted setting, so "13 settings" no longer disagrees with "Applied 12 setting(s)". History's count leaves it out too.
+- The "RigTune uses the network" toast no longer shows over the benchmark's results after a run in the benchmark world; if it's still waiting, it shows on the next title screen.
+
 ## [0.5.0] - 2026-09-28
 
 ### Changed
