@@ -414,3 +414,22 @@ jobs:
           python-version: '3.11'
       - name: Check rules-v1.json
         run: python tools/check_rules_v1.py
+
+  # The one check main's ruleset requires: every job above passed or was skipped. The game-test legs are named after the
+  # Minecraft nodes (tools/gametest_matrix.py), so a required list of their names would break when a node is added.
+  ci-ok:
+    if: always()
+    needs: [java, e2e, gametest-matrix, client-gametest, python, rules-consistency, rules-v1-compat]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *) exit 1 ;;
+            esac
+          done

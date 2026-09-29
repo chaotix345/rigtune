@@ -1,0 +1,11 @@
+# GitHub Actions only, as one monthly PR. The Gradle side (Minecraft, Fabric, Loom, Stonecutter) is pinned on purpose
+# and moved by hand (tools/add_mc_version.py, tools/MC_VERSIONS.md).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
