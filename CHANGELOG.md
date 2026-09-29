@@ -174,7 +174,7 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 - The benchmark result's table and the benchmark charts can't be reached with the keyboard or read by the Narrator yet. The Narrator text was checked in tests, not with a real screen reader.
 - On some Windows machines vanilla Minecraft 26.3 crashes natively during startup (around the time its sound system starts), with or without RigTune. It can take a few relaunches.
 - An installed 0.1.0, 0.2.0 or 0.3.0 is offered the update only once the Modrinth listing is approved: RigTune finds its own update through Modrinth, which doesn't list versions of a project that is still in review.
-- Quilt isn't supported (see the [README's FAQ](https://github.com/chaotix345/rigtune#does-rigtune-work-with-quilt)).
+- Quilt isn't supported (see the [FAQ](https://github.com/chaotix345/rigtune/blob/main/docs/guide/faq.md#does-rigtune-work-with-quilt)).
 - Preview can't show what Apply only learns once a file is downloaded: a file that isn't a Fabric mod, a mod you already have, or a version another mod's requirements don't allow. Modrinth's answers can also change between Preview and Apply.
 - The incompatibility checks don't use disables an earlier Apply staged, and the check of a staged mod's own "incompatible" list needs Modrinth on.
 - Measuring the shader cost turns shaders off and on through Iris, which re-saves `config/iris.properties` and the active pack's settings file with a new date line; every value stays the same.
@@ -224,7 +224,7 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 ### Known issues
 - On some Windows machines vanilla Minecraft 26.3 crashes natively during startup (around the time its sound system starts), with or without RigTune. It can take a few relaunches.
 - An installed 0.1.0 or 0.2.0 is offered the 0.3.0 update only once the Modrinth listing is approved: RigTune finds its own update through Modrinth, which doesn't list versions of a project that is still in review.
-- Quilt isn't supported (see the [README's FAQ](https://github.com/chaotix345/rigtune#does-rigtune-work-with-quilt)).
+- Quilt isn't supported (see the [FAQ](https://github.com/chaotix345/rigtune/blob/main/docs/guide/faq.md#does-rigtune-work-with-quilt)).
 - MultiMC and other Prism-family launchers are named Prism Launcher and get Prism's steps. Other launchers (GDLauncher, for example) aren't recognised and get the generic advice.
 - The incompatibility checks don't see changes an earlier Apply already staged: an addition that clashes only with the old version of a mod whose update is already waiting for a restart is refused until after that restart, and the opposite case isn't caught. Of two updates Modrinth marks incompatible with each other, one is refused.
 - Preview can't show what Apply only learns once a file is downloaded (a file that isn't a Fabric mod, or a mod you already have, is left out; the screen says so), and Modrinth's answers can change between Preview and Apply.
