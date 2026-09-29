@@ -23,7 +23,8 @@ all back at the end, so there's nothing to name or sort. Take one at every **[F2
 ## 2. First start (3 min)
 1. Press **Play**. On the title screen, click **RigTune** (next to Options…), or press **F8** at any time.
 2. What you should see at the top of the RigTune screen:
-   - your processor (Intel Core Ultra 5 225H or Ultra 7 255H) with its number of threads (14 or 16) and a "CPU tier" line;
+   - your processor (Intel Core Ultra 5 225H or Ultra 7 255H) with its number of threads (14 or 16); there's no
+     separate "CPU tier" line;
    - **Intel Arc** graphics with a "GPU tier" line;
    - an "Estimated tier" line. **[F2]**
 3. A notice near the top says **"New? History… lets you undo each Apply."** Press **How it works**: a page called
@@ -64,8 +65,7 @@ Only if you have time. This records what your graphics driver reports under Vulk
 1. Make a second test instance, `rigtune-test-26.3`, the same way as step 1: Fabric, 26.3, Fabric API and the 26.3
    test file.
 2. Press **Play**.
-3. In **Options… → Video Settings…**, set the graphics API option to **Vulkan**. The game calls it the "preferred
-   graphics API"; the button's exact name may differ.
+3. In **Options… → Video Settings…**, turn on **Prefer Vulkan (Experimental)**.
 4. Quit and press **Play** again. Open RigTune once. **[F2]** Quit.
 5. If 26.3 has no such option, or crashes on start, skip this step and just tell us.
 
@@ -85,3 +85,4 @@ After that you can delete the test instances in the Modrinth App.
 - Which steps you did and which you skipped.
 - Anything that looked wrong, confusing or slow.
 - A rough time for the battery messages in step 5, if you noticed it.
+- Screenshots can simply be sent in chat.

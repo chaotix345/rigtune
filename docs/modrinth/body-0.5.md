@@ -34,15 +34,17 @@ RigTune reads your PC's hardware and recommends the performance mods, mod settin
 
 ## Using an older RigTune with the Modrinth App, CurseForge, ATLauncher or Prism?
 
-RigTune 0.1-0.4 changed mod files itself. In the Modrinth App (and other launchers that keep their own mod list), when RigTune updated or added mods, the app's **Update** or **Update all** can fail with "The updated filename belongs to another content item". To fix it:
+RigTune 0.1-0.4 changed mod files itself. In the Modrinth App (and other launchers that keep their own mod list), when RigTune updated or added mods, the app's **Update all** can fail with "Couldn't prepare instance" (details: "Restore or repair mods/<old>.jar before updating this instance; its current content cannot be backed up safely"), and switching a mod's version can still fail with the older "The updated filename belongs to another content item". Checked in the Modrinth App 0.21.6. To fix it, with the game closed, for each old copy the notice names:
 
-1. Do this **in the app**, not in File Explorer: the app keeps its own list.
-2. Open the instance → **Content** → filter **Disabled**.
-3. Select the old copy of each mod RigTune updated → **Delete**. RigTune's newer versions stay and keep working. If an old copy isn't listed, the app has already hidden it: nothing to do.
+- If the old copy is listed in the instance's **Content**, switched off (the **State** filter's **Disabled** shows them), delete it there. RigTune's newer version stays.
+- If it isn't listed (a mod the app installed since 0.21 drops out of Content once renamed), it still blocks Update all:
+  1. In **Content**, delete RigTune's newer copy of that mod.
+  2. In File Explorer, rename `<old>.jar.disabled` back to `<old>.jar` in the instance's `mods` folder.
+  3. Back in **Content**, press **Refresh**: the old version reappears, with an update available. Press **Update** (or **Update all**).
 
-Or, to let the app own every file: delete RigTune's new copy, update the old one, then switch it on. Mods that update themselves (such as Distant Horizons' own updater) can cause the same problem.
+Mods that update themselves (such as Distant Horizons' own updater) can cause the same problem.
 
-RigTune 0.5 no longer changes mod files in these launchers; it tells you what to change there, and a notice lists the old copies from RigTune's own records with your launcher's steps (**Copy list** copies the file names). RigTune never deletes them itself. Older RigTune versions show a warning with these steps too.
+RigTune 0.5 no longer changes mod files in these launchers; it tells you what to change there, and a notice lists the old copies from RigTune's own records with your launcher's steps (**Copy steps** copies the steps and the file names). RigTune never deletes them itself. Older RigTune versions show a warning with these steps too.
 
 If the Modrinth App's game-settings sync is on, the app copies `options.txt` between your synced instances, so RigTune's setting changes reach them too. To stop it: App settings → Synced settings → Sync game options, or the instance → Instance settings → Sync overrides → Unsync game settings.
 
@@ -76,7 +78,7 @@ Launcher detection happens on your PC only, from a few named launcher properties
 
 ## What's been tested
 
-Recommendations are estimates. Everything measured was measured on one PC (Ryzen 7 7800X3D, Radeon RX 7800 XT, 32 GB); for other hardware RigTune picks settings from its hardware tables, and automated tests check that the rules give the intended recommendations on hardware it wasn't run on, not that they make the game faster there. The thresholds behind the one-click fixes, Try it's noise floor and the launch-time alerts come from that PC and one player's play and launches. Server features were tested against a local server (not the real Realms service), and the battery offer with simulated batteries. A benchmark on your own PC is the stronger evidence. Details are in the [README](https://github.com/chaotix345/rigtune#what-has-been-verified).
+Recommendations are estimates. Everything measured was measured on one PC (Ryzen 7 7800X3D, Radeon RX 7800 XT, 32 GB); for other hardware RigTune picks settings from its hardware tables, and automated tests check that the rules give the intended recommendations on hardware it wasn't run on, not that they make the game faster there. The thresholds behind the one-click fixes, Try it's noise floor and the launch-time alerts come from that PC and one player's play and launches. Server features were tested against a local server (not the real Realms service); the battery offer was tested with simulated batteries and on a real laptop. A benchmark on your own PC is the stronger evidence. Details are in the [README](https://github.com/chaotix345/rigtune#what-has-been-verified).
 
 ## Source and credits
 
