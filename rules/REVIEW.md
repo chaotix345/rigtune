@@ -3,13 +3,20 @@
 Target MC versions: 26.3, 26.2. Newest: 26.3.
 
 ## Summary
-- New upstream mods to triage: 0
+- New upstream mods to triage: 6
 - Rule mods with a status or removal concern: 0
-- Rule mods missing a Fabric build for 26.3: 3
+- Rule mods missing a Fabric build for 26.3: 1
 - Rules changed or omitted in rules-v1.json: 46
 
 ## (a) Upstream mods not yet tracked in knowledge.json
-None found.
+| slug | title | pack(s) | optimization category |
+|---|---|---|---|
+| adaptive-tooltips | Adaptive Tooltips | Additive | no |
+| language-reload | Language Reload | Fabulously Optimized | yes |
+| no-chat-reports | No Chat Reports | Fabulously Optimized | no |
+| polytone | Polytone | Fabulously Optimized | no |
+| puzzle | Puzzle | Fabulously Optimized, Additive | no |
+| zfastsurface | Fast Surface | Additive | yes |
 
 ## (b) Rule mods needing a status check
 None found.
@@ -17,9 +24,7 @@ None found.
 ## (c) Rule mods with no Fabric release for 26.3
 | slug | title |
 |---|---|
-| krypton | Krypton |
 | vulkanmod | VulkanMod |
-| particle-core | Particle Core |
 
 ## (d) Omitted from rules-v1.json
 0.1.x clients read rules-v1.json, the v1 projection of these rules. Check that nothing below makes 0.1.x less safe, in particular that an omitted setting entry doesn't change which entry wins for a key.
