@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 19,
-  "generatedAt": "2026-09-29T05:03:09Z",
+  "revision": 20,
+  "generatedAt": "2026-10-26T08:29:32Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -601,7 +601,7 @@
       "defaultSelected": false,
       "upstream": {
         "fabulouslyOptimized": false,
-        "additive": false
+        "additive": true
       }
     },
     {
@@ -1625,12 +1625,14 @@
       "ferrite-core",
       "immediatelyfast",
       "ixeris",
+      "krypton",
       "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
       "moonrise-opt",
       "moreculling",
       "nvidium",
+      "particle-core",
       "renderscale",
       "scalablelux",
       "sodium",
@@ -1698,6 +1700,7 @@
         "iris",
         "ixeris",
         "lambdynamiclights",
+        "language-reload",
         "lithium",
         "main-menu-credits",
         "mixintrace-reborn",
@@ -1707,6 +1710,8 @@
         "moreculling",
         "optigui",
         "placeholder-api",
+        "polytone",
+        "puzzle",
         "reeses-sodium-options",
         "renice-shot",
         "rrls",
@@ -1721,6 +1726,7 @@
     "additive": {
       "mcVersion": "26.3",
       "slugs": [
+        "adaptive-tooltips",
         "animaticarefabricated",
         "asynclogger",
         "better-block-entities",
@@ -1749,6 +1755,7 @@
         "immediatelyfast",
         "iris",
         "ixeris",
+        "krypton",
         "lambdabettergrass",
         "lambdynamiclights",
         "lithium",
@@ -1757,6 +1764,7 @@
         "modmenu",
         "optigui",
         "particle-core",
+        "puzzle",
         "quick-pack",
         "renderscale",
         "resourceful-config",
@@ -1770,7 +1778,9 @@
         "yacl",
         "zconfig",
         "zfastnoise",
-        "zmaterial-rule-compiler"
+        "zfastsurface",
+        "zmaterial-rule-compiler",
+        "zoomify"
       ]
     }
   }
