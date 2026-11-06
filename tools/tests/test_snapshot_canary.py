@@ -47,6 +47,14 @@ class SnapshotCanaryTests(unittest.TestCase):
         self.assertIn("Testing Minecraft 26.4-snapshot-1", log)
         self.assertEqual("", summary)
 
+    def test_the_4_november_manifest_resolves_snapshot_7(self):
+        # Mojang's manifest when run 41831747063 (2026-11-04) skipped: the resolve step picked 26.4-snapshot-7 then too;
+        # the skip came from add_mc_version.py (no Mod Menu build for snapshot-7), not from this step.
+        log, output, summary = self.run_main("--manifest", str(FIXTURES / "manifest-2026-11-04.json"))
+        self.assertEqual("mc=26.4-snapshot-7\nskip=false\n", output)
+        self.assertIn("Testing Minecraft 26.4-snapshot-7", log)
+        self.assertEqual("", summary)
+
     def test_a_given_version_is_trimmed_and_needs_no_manifest(self):
         def no_manifest():
             raise AssertionError("fetched the manifest")

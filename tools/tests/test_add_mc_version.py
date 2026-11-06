@@ -362,6 +362,50 @@ class AddVersionTest(RepoCase):
         self.assertEqual(code, 1)
         self.assertIn("no Mod Menu build", err)
 
+    def snapshot_2_world(self, modmenu_fallback=None):
+        world = FakeWorld()
+        manifest = json.loads(fixture("manifest.json"))
+        manifest["latest"]["snapshot"] = "26.4-snapshot-2"
+        manifest["versions"].insert(0, {"id": "26.4-snapshot-2", "type": "snapshot",
+                                        "url": "https://example.invalid/26.4-snapshot-2.json"})
+        world.responses[amv.MANIFEST_URL] = (200, json.dumps(manifest).encode("utf-8"))
+        world.responses["https://example.invalid/26.4-snapshot-2.json"] = (200, fixture("version-26.4-snapshot-1.json"))
+        world.responses[amv.fabric_loader_url("26.4-snapshot-2")] = (200, fixture("fabric-loader-26.4-snapshot-1.json"))
+        for project in ("fabric-api", "sodium", "iris"):
+            world.responses[amv.modrinth_versions_url(project, "26.4-snapshot-2")] = (
+                200, fixture(f"modrinth-{project}-26.4-snapshot-1.json"))
+        world.responses[amv.modrinth_versions_url("modmenu", "26.4-snapshot-2")] = (200, b"[]")
+        if modmenu_fallback is not None:
+            world.responses[amv.modrinth_versions_url("modmenu", "26.4-snapshot-1")] = (200, modmenu_fallback)
+        return world
+
+    def test_snapshot_without_modmenu_uses_an_earlier_snapshots_build(self):
+        root = self.make_repo()
+        code, out, err, world = self.run_tool(root, ["26.4-snapshot-2", "--prerelease-ok"], self.snapshot_2_world())
+        self.assertEqual(code, 0, err)
+        props = (root / "versions" / "26.4-snapshot-2" / "gradle.properties").read_text(encoding="utf-8")
+        self.assertIn("modmenu_version=22.0.0-alpha.1\n", props)
+        self.assertIn("Mod Menu: none for 26.4-snapshot-2; 22.0.0-alpha.1 (alpha, for 26.4-snapshot-1) is used", out)
+        self.assertIn("No Mod Menu build for 26.4-snapshot-2 yet: modmenu_version is 26.4-snapshot-1's 22.0.0-alpha.1", out)
+        self.assertIn(amv.modrinth_versions_url("modmenu", "26.4-snapshot-1"), [r[0] for r in world.requests])
+
+    def test_snapshot_fallback_still_needs_a_modmenu_build_on_its_maven(self):
+        root = self.make_repo()
+        before = self.snapshot(root)
+        world = self.snapshot_2_world(modmenu_fallback=b"[]")
+        code, out, err, _ = self.run_tool(root, ["26.4-snapshot-2", "--prerelease-ok"], world)
+        self.assertEqual(code, 1)
+        self.assertIn("no Mod Menu build for 26.4-snapshot-2 yet", err)
+        self.assertEqual(self.snapshot(root), before)
+
+    def test_release_without_modmenu_is_refused_not_given_a_snapshots_build(self):
+        root = self.make_repo(versions=("26.2",))
+        world = FakeWorld({amv.modrinth_versions_url("modmenu", "26.3"): (200, b"[]")})
+        code, out, err, world = self.run_tool(root, ["26.3", "--dry-run"], world)
+        self.assertEqual(code, 1)
+        self.assertIn("no Mod Menu build for 26.3 yet", err)
+        self.assertEqual(1, sum("/project/modmenu/" in r[0] for r in world.requests))
+
     def test_prefers_release_over_newer_alpha(self):
         root = self.make_repo(versions=("26.2",))
         code, out, err, _ = self.run_tool(root, ["26.3", "--dry-run"])
