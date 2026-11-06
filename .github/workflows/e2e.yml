@@ -84,6 +84,7 @@ jobs:
           name: e2e-new-jars
           path: versions/*/build/libs/*.jar
           if-no-files-found: error
+          retention-days: 7
 
   e2e:
     name: e2e ${{ matrix.id }} (${{ matrix.mc }})
@@ -182,6 +183,7 @@ jobs:
             ${{ runner.temp }}/e2e/*/instance*/logs/
             ${{ runner.temp }}/e2e/*/instance*/crash-reports/
           if-no-files-found: ignore
+          retention-days: 7
 
   # AC3f.1, release tier only: the Stutter Doctor's dev script (tools/e2e/stutter_run.py: monitor on, benchmark world,
   # teleport to never-generated terrain, save-all, forced GCs every 5 s) once per node in a production client on the
@@ -246,6 +248,7 @@ jobs:
           name: stutter-script-${{ matrix.mc }}
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: ignore
+          retention-days: 7
 
   # AC3e.2, release tier only: BatteryFlowGameTest's OSHI block, one job per node, on the caller's RigTune jar
   # (-PgametestModJar: the staged bytes, never a rebuild; only the gametest jar is built here). The runner's kernel has no
@@ -321,3 +324,4 @@ jobs:
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
           if-no-files-found: ignore
+          retention-days: 7

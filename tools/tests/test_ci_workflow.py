@@ -286,6 +286,62 @@ class JdkRetryTests(unittest.TestCase):
         self.assertEqual([], jdk_retry_problems(good))
 
 
+def upload_artifact_steps(text):
+    """(artifact name, retention-days or None) for each actions/upload-artifact step of a workflow."""
+    lines = text.splitlines()
+    found = []
+    for i, line in enumerate(lines):
+        if "uses: actions/upload-artifact@" not in line:
+            continue
+        start = i
+        while not lines[start].lstrip().startswith("- "):
+            start -= 1
+        indent = len(lines[start]) - len(lines[start].lstrip())
+        end = i + 1
+        while end < len(lines) and (not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip()) > indent):
+            end += 1
+        body = "\n".join(lines[start:end]).split("with:", 1)[-1]
+        name = re.search(r"^\s+name: (.+)$", body, re.M)
+        days = re.search(r"^\s+retention-days: (\d+)\s*$", body, re.M)
+        found.append((name.group(1).strip() if name else None, int(days.group(1)) if days else None))
+    return found
+
+
+class ArtifactRetentionTests(unittest.TestCase):
+    # Artifacts don't keep the 90-day default: 7 days for CI, test, E2E and canary artifacts, 30 for the release's files.
+    def test_every_upload_sets_its_retention(self):
+        names = set()
+        for file in sorted(WORKFLOWS.glob("*.yml")):
+            for name, days in upload_artifact_steps(file.read_text(encoding="utf-8")):
+                names.add(name)
+                self.assertEqual(30 if name == "release-files" else 7, days, f"{file.name}: {name}")
+        self.assertTrue({"release-files", "e2e-new-jars", "rigtune-jars"} <= names, names)
+
+    def test_the_parser_sees_a_missing_retention(self):
+        text = ("jobs:\n  j:\n    steps:\n      - uses: actions/upload-artifact@v7\n        with:\n          name: a\n"
+                "      - name: B\n        uses: actions/upload-artifact@v7\n        with:\n          name: b\n          retention-days: 7\n")
+        self.assertEqual([("a", None), ("b", 7)], upload_artifact_steps(text))
+
+
+class UpdateRulesWorkflowTests(unittest.TestCase):
+    # The repo doesn't let GitHub Actions create PRs: the job pushes the branch, dispatches build.yml on it, and when PR
+    # creation isn't permitted it leaves a notice for HQ and succeeds; any other failure still fails.
+    def test_the_pr_step_dispatches_ci_first_and_falls_back_to_a_notice(self):
+        jobs = parse_jobs((WORKFLOWS / "update-rules.yml").read_text(encoding="utf-8"))
+        step = [s for s in jobs["update-rules"]["steps"] if s.get("name") == "Open or update the rules-update PR"]
+        self.assertEqual(1, len(step))
+        self.assertEqual("steps.changes.outputs.changed == 'true", step[0].get("if"))
+        run = step[0]["run"]
+        self.assertLess(run.index('git push --force origin "$branch"'), run.index('gh workflow run build.yml --ref "$branch"'))
+        self.assertLess(run.index('gh workflow run build.yml --ref "$branch"'), run.index("gh pr create"))
+        fallback = run[run.index("gh pr create"):]
+        self.assertIn('grep -q "not permitted to create or approve pull requests"', fallback)
+        self.assertIn('echo "::notice::${branch} pushed; HQ opens the PR"', fallback)
+        self.assertIn('echo "${branch} pushed; HQ opens the PR" >> "$GITHUB_STEP_SUMMARY"', fallback)
+        self.assertLess(fallback.index("::notice::"), fallback.index("exit 1"))
+        self.assertNotIn("|| true", run)
+
+
 class CheckFakeModrinthTests(unittest.TestCase):
     STARTUP = [
         {"method": "POST", "path": "/v2/version_files", "status": 200},

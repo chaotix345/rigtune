@@ -53,19 +53,28 @@ jobs:
           git commit -m "chore(rules): weekly rules update ${date_stamp}"
           git push --force origin "$branch"
 
+          # A push or PR made with the default GITHUB_TOKEN does not trigger other workflows'
+          # `push`/`pull_request` events, but a workflow_dispatch always creates a run. Dispatch
+          # build.yml before the PR step so CI runs on the branch either way.
+          gh workflow run build.yml --ref "$branch"
+
+          # The repo doesn't let GitHub Actions create pull requests (on purpose): then the
+          # branch stays pushed and HQ opens the PR. Any other failure fails the job.
           existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -n "$existing_pr" ]; then
             gh pr edit "$existing_pr" --body-file rules/REVIEW.md
-          else
-            gh pr create \
+          elif ! out=$(gh pr create \
               --title "Rules update ${date_stamp}" \
               --body-file rules/REVIEW.md \
               --head "$branch" \
-              --base main
+              --base main 2>&1); then
+            echo "$out" >&2
+            if echo "$out" | grep -q "not permitted to create or approve pull requests"; then
+              echo "::notice::${branch} pushed; HQ opens the PR"
+              echo "${branch} pushed; HQ opens the PR" >> "$GITHUB_STEP_SUMMARY"
+            else
+              exit 1
+            fi
+          else
+            echo "$out"
           fi
-
-          # A PR/push made with the default GITHUB_TOKEN does not itself trigger other
-          # workflows' `push`/`pull_request` events (GitHub suppresses that to avoid
-          # accidental recursive workflow loops). build.yml would otherwise never run
-          # against this branch, so kick it off explicitly via workflow_dispatch.
-          gh workflow run build.yml --ref "$branch"

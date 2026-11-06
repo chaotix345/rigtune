@@ -119,6 +119,7 @@ jobs:
           name: release-files
           path: ${{ runner.temp }}/release-files/
           if-no-files-found: error
+          retention-days: 30
 
   # The release tier on the staged jars (the dry run may pick the push tier to save time).
   e2e:
