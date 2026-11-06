@@ -498,6 +498,7 @@
 	"rigtune.preview.value.none": "not set",
 	"rigtune.profile.active": "Active",
 	"rigtune.profile.baseline": "My settings",
+	"rigtune.profile.hold_reason": "Your %s profile sets this on purpose, so it starts unticked; switch to My settings for RigTune's usual suggestions.",
 	"rigtune.profile.code.error.damaged": "That code is damaged or incomplete. Copy the whole code again.",
 	"rigtune.profile.code.error.invalid": "That code has a setting RigTune can't accept, so nothing was imported.",
 	"rigtune.profile.code.error.newer": "That code was made by a newer RigTune. Update RigTune to import it.",

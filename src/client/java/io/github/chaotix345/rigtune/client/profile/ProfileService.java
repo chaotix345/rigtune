@@ -31,6 +31,7 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ActiveProfile;
 import io.github.chaotix345.rigtune.core.profile.BatteryPrompt;
 import io.github.chaotix345.rigtune.core.profile.EffectiveSettings;
+import io.github.chaotix345.rigtune.core.profile.ProfileHold;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileNames;
 import io.github.chaotix345.rigtune.core.profile.ProfileNotes;
@@ -664,6 +665,29 @@ public final class ProfileService {
 			return null;
 		}
 		return Journal.idsWithFolded(journal.entries());
+	}
+
+	// #45 (the report post-step, on the rebuild's worker): the settings the active profile's switch set, with its name;
+	// null for "My settings", while no profile stands, or when history.json can't be read.
+	public ProfileHold.@Nullable Active hold() {
+		ProfileStore.Snapshot profiles = store().snapshot();
+		String id = profiles.active();
+		String entryId = profiles.activeEntry();
+		if (id == null || entryId == null) {
+			return null;
+		}
+		Profile profile = profiles.profiles().stream().filter(p -> id.equals(p.id())).findFirst().orElse(null);
+		if (profile != null && ProfileStore.SOURCE_BASELINE.equals(profile.source())) {
+			return null;
+		}
+		Journal journal = ClientJournal.get();
+		if (journal.state() != Journal.State.OK || !ActiveProfile.inEffect(entryId, journal.state(), journal.entries())) {
+			return null;
+		}
+		JournalEntry entry = journal.entries().stream().filter(e -> entryId.equals(e.id())).findFirst().orElse(null);
+		Text name = resolvedName(id, profiles);
+		List<ProfileHold.Hold> holds = ProfileHold.holds(entry);
+		return name == null || holds.isEmpty() ? null : new ProfileHold.Active(name, holds);
 	}
 
 	// v0.5 C16 (WS-P2, read-only): the active profile's id, while the switch that made it active still stands.
