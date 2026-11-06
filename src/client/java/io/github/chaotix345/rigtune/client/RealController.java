@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.benchmark.RunRebuilds;
 import io.github.chaotix345.rigtune.client.benchmark.TrendService;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.jvm.JvmService;
@@ -126,6 +127,7 @@ public final class RealController implements RigTuneController {
 	});
 
 	private Minecraft minecraft;
+	private final RunRebuilds runRebuilds = new RunRebuilds(BenchmarkController::running);
 	private final Path configDir;
 	private final Path modsDir;
 	private final Path pendingFile;
@@ -217,6 +219,11 @@ public final class RealController implements RigTuneController {
 
 	public void start(Minecraft minecraft) {
 		this.minecraft = minecraft;
+		BenchmarkController.afterRestore(() -> {
+			if (runRebuilds.release()) {
+				rebuild();
+			}
+		});
 		reloadRules();
 		rescan();
 		// v0.5 (PLAN contracts 13d): the features' start-time work, one Probes.EXECUTOR task.
@@ -359,7 +366,7 @@ public final class RealController implements RigTuneController {
 			RulesDocument doc = rules;
 			HardwareProfile hw = hardware;
 			List<InstalledMod> scanned = mods;
-			if (doc == null || hw == null || scanned == null) {
+			if (doc == null || hw == null || scanned == null || runRebuilds.defer()) {
 				return;
 			}
 			SettingsSnapshot settings = SettingsBridge.read(minecraft);
