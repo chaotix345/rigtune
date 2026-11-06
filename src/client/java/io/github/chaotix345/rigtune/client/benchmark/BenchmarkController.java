@@ -410,6 +410,13 @@ public final class BenchmarkController {
 		return active != null || pendingWorld != null;
 	}
 
+	// #42: a run has its knobs applied (begin() sets active before prepare() changes anything, and every path that clears
+	// it goes through finish(), which calls RunRebuilds.restored()). A benchmark world still loading changes no setting,
+	// and its failure, refusal or cancel clears pendingWorld without finish().
+	public static boolean measuring() {
+		return active != null;
+	}
+
 	public static @Nullable Outcome lastOutcome() {
 		return lastOutcome;
 	}

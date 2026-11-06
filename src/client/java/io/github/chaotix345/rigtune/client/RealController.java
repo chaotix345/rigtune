@@ -127,8 +127,8 @@ public final class RealController implements RigTuneController {
 	});
 
 	private Minecraft minecraft;
-	// A lambda, not BenchmarkController::running: the method reference would load that class at construction.
-	private final RunRebuilds runRebuilds = new RunRebuilds(() -> BenchmarkController.running());
+	// A lambda, not BenchmarkController::measuring: the method reference would load that class at construction.
+	private final RunRebuilds runRebuilds = new RunRebuilds(() -> BenchmarkController.measuring());
 	private final Path configDir;
 	private final Path modsDir;
 	private final Path pendingFile;

@@ -26,7 +26,7 @@ public final class RunRebuilds {
 	}
 
 	// BenchmarkController.finish(), after the restore.
-	static void restored() {
+	public static void restored() {
 		try {
 			onRestored.run();
 		} catch (RuntimeException e) {
