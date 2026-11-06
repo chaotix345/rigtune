@@ -92,6 +92,55 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
                          failing(stutter_run.evaluate(lines, stutter, gc)[0]))
 
+    # Issue #33, release run 36530247606 attempt 1 (26.2), rebuilt from its logged checks (the artifacts are gone): capture on,
+    # world entry at +7 s, tp at +27 s, all 10 listed spikes forced GCs; "after teleport" tagged near the tp only at 36.8,
+    # 2 tagged in all with 10.5 (the world entry's); "chunks loading" 11, 4 unlisted.
+    ISSUE_33 = [(10.5, "TL"), (15.8, "L"), (21.2, "L"), (26.4, "L"), (36.8, "T"), (42.1, "L"), (47.3, "L"), (52.6, "L"), (57.9, ""), (63.1, "")]
+
+    def issue_33_run(self, spikes=ISSUE_33, chunks_loading=11):
+        cap = 6 * 3600 + 20 * 60 + 50
+
+        def stamp(s):
+            return "[{:02d}:{:02d}:{:02d}]".format(int(s) // 3600, int(s) // 60 % 60, int(s) % 60)
+        lines = [stamp(cap) + " [Render thread/INFO]: Stutter Doctor: capture on (collector g1)",
+                 stamp(cap + 7) + " [Render thread/INFO]: Dev stutter: in the benchmark world; standing still for 20 s",
+                 stamp(cap + 27) + " [Render thread/INFO]: Dev stutter: tp @a 200000 200 200000",
+                 stamp(cap + 80) + " [Render thread/INFO]: Dev stutter: PASSED; stopping the client"]
+        worst = [{"t": t, "ms": 300.0, "baseMs": 80.0, "causes": ["gc:high:FULL:EXPLICIT"] + (["afterTeleport:context"] if "T" in tags else [])
+                  + (["chunksLoading:context"] if "L" in tags else [])} for t, tags in spikes]
+        session = {"source": "monitor", "worst": worst, "causes": {"gc": 0.91, "tick": 0.01, "unknown": 0.08},
+                   "tags": {"afterTeleport": 1 + sum(1 for _, tags in spikes if "T" in tags), "chunksLoading": chunks_loading}}
+        gc = "\n".join("[{}+0000][{:.3f}s][info][gc       ] GC({}) Pause Full (System.gc()) 900M->200M(4096M) 290.000ms".format(
+            (datetime.datetime(2026, 9, 29) + datetime.timedelta(seconds=cap + 0.62 + t)).isoformat(timespec="milliseconds"), 30 + t, i)
+            for i, (t, _) in enumerate(spikes))
+        return lines, {"sessions": [session]}, gc
+
+    def test_a_gc_hitch_between_the_world_entry_s_loading_and_the_teleport_s_passes(self):
+        # 26.4 s is the world entry's loading (no "after teleport": before the tp), inside the log's tp - 1 s; the tp's
+        # never-generated chunks arrive from 42.1 s on. The GC hitch at 36.8 s lies between the two.
+        checks, facts = stutter_run.evaluate(*self.issue_33_run())
+        self.assertEqual([], failing(checks))
+        self.assertEqual(27, facts["tpSession"])
+        detail = next(d for n, _, d in checks if n.startswith("\"chunks loading\""))
+        self.assertIn("first at 42.1 s, last at 52.6 s; untagged between them: []", detail)
+
+    def test_an_untagged_spike_inside_the_teleport_s_loading_still_fails(self):
+        spikes = sorted(self.ISSUE_33 + [(44.7, "")])
+        self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
+                         failing(stutter_run.evaluate(*self.issue_33_run(spikes))[0]))
+
+    def test_the_world_entry_s_loading_alone_does_not_show_the_teleport_s(self):
+        # No chunk load tagged after the tp: the entry's 26.4 s spike, inside tp - 1 s, no longer stands in for it.
+        spikes = [(t, tags.replace("L", "") if t > 30 else tags) for t, tags in self.ISSUE_33]
+        self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
+                         failing(stutter_run.evaluate(*self.issue_33_run(spikes, chunks_loading=4))[0]))
+
+    def test_a_tagged_spike_in_the_tp_s_slop_starts_the_teleport_s_loading(self):
+        # tp - 1 .. tp + 1: "after teleport" says the spike came after the product's tp, so its loading is the tp's.
+        spikes = [(t, "TL" if t == 26.4 else tags) for t, tags in self.ISSUE_33]
+        self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
+                         failing(stutter_run.evaluate(*self.issue_33_run(spikes))[0]))
+
     # C1r: capture on at 02:12:36, world entry at +2 s, tp at +22 s; the product's window is 10 s.
     def test_the_teleport_window_s_edges(self):
         def failing_with(*extra):
