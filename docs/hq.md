@@ -47,7 +47,8 @@ RigTune is public and uses only standard `ubuntu-24.04` runners, which are free 
 1. Find the newest `bot/rules-update-*` branch ahead of main: `git fetch --prune && git branch -r --list 'origin/bot/rules-update-*'`, `git log origin/main..<branch>`.
 2. `gh pr create --base main --head bot/rules-update-<date> --title "Rules update <date> (r<n>)" --body "<what changed, from REVIEW.md>"`.
 3. Review: the diff of the three rules files (`rules/rules-v2.json`, `rules/rules-v1.json`, `src/main/resources/rigtune/rules-v2.json` must agree), the revision bump, each availability change checked on the Modrinth API, and `rules/REVIEW.md`'s triage lists. Availability and pack-list changes only: HQ's review is enough. Anything that changes what a rule recommends, a setting value, or a new or removed mod: a fresh code-reviewer subagent too (skill "Reviewing and merging" step 3).
-4. Gate on the merged head, merge with `--auto`, verify the raw files, then delete the superseded bot branches (`git push origin --delete bot/rules-update-<older date>`).
+4. Gate on the merged head, merge with `--auto`, verify the raw files, then delete the superseded bot branches (`git push origin --delete bot/rules-update-<older date>`; one missing ref makes the whole push fail).
+   - The bot doesn't run the Java tests, and some scenario tests pin upstream facts (e.g. PR #50: "Krypton has no 26.3 build"). When `java` fails on a bot PR because a fact changed, HQ fixes the test on the bot branch (temporary worktree, gate, push) and says so in the PR; when it fails because the new rules recommend something wrong, fix knowledge.json through a worker instead.
 5. Triage `rules/REVIEW.md` "(a) Upstream mods not yet tracked" into knowledge.json only through a worker PR.
 
 ## Releasing
