@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 20,
-  "generatedAt": "2026-11-02T10:30:41Z",
+  "revision": 21,
+  "generatedAt": "2026-11-06T10:35:39Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -596,7 +596,8 @@
       },
       "conflictsWith": [
         "zfastnoise",
-        "zmaterial-rule-compiler"
+        "zmaterial-rule-compiler",
+        "e4mc"
       ],
       "defaultSelected": false,
       "upstream": {

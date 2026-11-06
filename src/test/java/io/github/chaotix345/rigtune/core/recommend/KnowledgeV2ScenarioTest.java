@@ -417,8 +417,9 @@ class KnowledgeV2ScenarioTest {
 				.containsKey("set:" + THREADS));
 	}
 
-	// Review 4, rules-accuracy-2: Fast Noise and Material Rule Compiler conflict with C2ME and Krypton (both earlier in the
-	// rules), so they're never offered alongside either; the first of those offered names them.
+	// Review 4, rules-accuracy-2: Fast Noise and Material Rule Compiler conflict with C2ME (earlier in the rules), so they're
+	// never offered alongside it; C2ME names them. Rules r21: their Krypton conflict is gone (no Modrinth incompatible
+	// dependency and no fabric.mod.json breaks on any version; Additive ships all three), so Krypton doesn't keep them out.
 	private static final String WORLDGEN_KEPT_OUT = "RigTune doesn't also offer Fast Noise or Material Rule Compiler, which conflict with it.";
 
 	@Test
@@ -429,20 +430,37 @@ class KnowledgeV2ScenarioTest {
 		assertTrue(desktop.get("add:c2me-fabric").reason().contains(WORLDGEN_KEPT_OUT), desktop.get("add:c2me-fabric").reason());
 		assertFalse(desktop.get("add:krypton").reason().contains("RigTune doesn't also offer"), desktop.get("add:krypton").reason());
 
-		// C2ME needs CPU tier 3.
+		// C2ME needs CPU tier 3. Without it, Krypton and the two worldgen mods are all offered, on 26.2 and 26.3.
 		Fixtures.Hw celeron = Fixtures.lowEndLaptop();
 		celeron.cpu = new CpuInfo("Intel(R) Celeron(R) N4020 CPU @ 1.10GHz", 2, 2, -1);
-		Map<String, Recommendation> laptop = run(celeron, "sodium", "lithium");
-		assertFalse(laptop.containsKey("add:c2me-fabric"), laptop.keySet().toString());
-		assertFalse(laptop.containsKey("add:zfastnoise"), laptop.keySet().toString());
-		assertTrue(laptop.get("add:krypton").reason().contains(WORLDGEN_KEPT_OUT), laptop.get("add:krypton").reason());
+		for (String mc : List.of("26.2", "26.3")) {
+			celeron.mcVersion = mc;
+			Map<String, Recommendation> laptop = run(celeron, "sodium", "lithium");
+			assertFalse(laptop.containsKey("add:c2me-fabric"), mc + " " + laptop.keySet());
+			assertTrue(laptop.containsKey("add:zfastnoise"), mc + " " + laptop.keySet());
+			assertTrue(laptop.containsKey("add:zmaterial-rule-compiler"), mc + " " + laptop.keySet());
+			assertFalse(laptop.get("add:krypton").reason().contains("RigTune doesn't also offer"), laptop.get("add:krypton").reason());
+		}
 
-		// Krypton has had a 26.3 build since rules r20 (Krypton 0.3.2), so on 26.3 too it keeps the two out and names them.
-		celeron.mcVersion = "26.3";
-		Map<String, Recommendation> later = run(celeron, "sodium", "lithium");
-		assertFalse(later.containsKey("add:zfastnoise"), later.keySet().toString());
-		assertFalse(later.containsKey("add:zmaterial-rule-compiler"), later.keySet().toString());
-		assertTrue(later.get("add:krypton").reason().contains(WORLDGEN_KEPT_OUT), later.get("add:krypton").reason());
+		// Additive ships Krypton with both: no conflict warning between them.
+		Map<String, Recommendation> additive = run(Fixtures.userRig(), "sodium", "lithium", "krypton", "zfastnoise", "zmatcomp");
+		assertTrue(additive.keySet().stream().noneMatch(id -> id.startsWith("conflict:") && id.contains("krypton")), additive.keySet().toString());
+	}
+
+	// Krypton issues #169/#170 (Nov 2026): the published Krypton 0.3.1 (26.2) and 0.3.2 (26.3) jars still @Redirect the login
+	// cipher that e4mc redirects too, so with both installed singleplayer worlds don't open. e4mc (mod id e4mc) ships in
+	// Fabulously Optimized and Additive.
+	@Test
+	void kryptonIsNotOfferedWithE4mc() {
+		for (String mc : List.of("26.2", "26.3")) {
+			Fixtures.Hw hw = Fixtures.userRig();
+			hw.mcVersion = mc;
+			assertTrue(run(hw, "sodium").containsKey("add:krypton"), mc);
+			Map<String, Recommendation> withE4mc = run(hw, "sodium", "e4mc");
+			assertFalse(withE4mc.containsKey("add:krypton"), mc + " " + withE4mc.keySet());
+			Map<String, Recommendation> both = run(hw, "sodium", "e4mc", "krypton");
+			assertEquals(Category.WARNING, both.get("conflict:e4mc+krypton").category(), mc + " " + both.keySet());
+		}
 	}
 
 	// Phase 5 finding 3.
