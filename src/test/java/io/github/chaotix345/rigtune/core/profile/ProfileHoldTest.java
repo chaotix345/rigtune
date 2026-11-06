@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.profile;
 
+import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -12,9 +13,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -81,5 +84,54 @@ class ProfileHoldTest {
 		Report plain = report(set(MAX_FPS, "260", "170"));
 		assertSame(plain, ProfileHold.apply(plain, null));
 		assertTrue(ProfileHold.apply(plain, null).recommendations().getFirst().selectedByDefault());
+	}
+
+	// A row FixHold (or the rules) already unticked keeps its one reason.
+	@Test
+	void anUntickedRowIsLeftAlone() {
+		Recommendation unticked = Recommendation.of("set:" + MAX_FPS, Category.SETTING, Impact.MEDIUM, Text.literal("t"), Text.literal("Held by a fix."),
+				new Action.SetSetting(MAX_FPS, "260", "170"), false);
+		Report report = report(unticked);
+		assertSame(report, ProfileHold.apply(report, active()));
+	}
+
+	// ProfileService.hold()'s decision (PR #60 review).
+	private static final ProfileStore.Battery NO_BATTERY = new ProfileStore.Battery(false, null, null, false);
+	private static final String MINE = "p-mine";
+	private static final List<ProfileStore.Profile> PROFILES = List.of(new ProfileStore.Profile(MINE, "My settings", null, ProfileStore.SOURCE_BASELINE,
+			"2026-11-01T00:00:00Z", null, null, Map.of(MAX_FPS, "170")));
+
+	private static ProfileHold.Active activeFor(String id, Journal.State state, List<JournalEntry> entries) {
+		ProfileStore.Snapshot snapshot = new ProfileStore.Snapshot(PROFILES, id, "e-1", NO_BATTERY);
+		return ProfileHold.active(snapshot, state, entries, i -> i.equals("template:max_fps") ? MAX_FPS_NAME : Text.literal("My settings"));
+	}
+
+	@Test
+	void theActiveTemplatesSwitchIsHeld() {
+		ProfileHold.Active held = activeFor("template:max_fps", Journal.State.OK, List.of(maxFpsSwitch()));
+		assertEquals("Max FPS", held.profile().english());
+		assertEquals(ProfileHold.holds(maxFpsSwitch()), held.holds());
+	}
+
+	@Test
+	void mySettingsHoldsNothing() {
+		assertNull(activeFor(MINE, Journal.State.OK, List.of(maxFpsSwitch())));
+	}
+
+	@Test
+	void nothingIsHeldOnceTheSwitchNoLongerStands() {
+		JournalEntry undone = new JournalEntry("e-1", "2026-11-07T00:00:00Z", JournalEntry.APPLY, "0.5.2", "26.2", null,
+				List.of(JournalChange.setting(MAX_FPS, "170", "260", JournalChange.REVERTED, null)));
+		assertNull(activeFor("template:max_fps", Journal.State.OK, List.of(undone)), "every change undone");
+		assertNull(activeFor("template:max_fps", Journal.State.OK, List.of()), "the entry is gone");
+		assertNull(ProfileHold.active(new ProfileStore.Snapshot(PROFILES, null, null, NO_BATTERY), Journal.State.OK, List.of(maxFpsSwitch()), i -> MAX_FPS_NAME),
+				"no profile switched to");
+	}
+
+	@Test
+	void anUnreadableJournalHoldsNothing() {
+		for (Journal.State state : List.of(Journal.State.CORRUPT, Journal.State.UNREADABLE, Journal.State.NEWER, Journal.State.MISSING)) {
+			assertNull(activeFor("template:max_fps", state, List.of(maxFpsSwitch())), state.name());
+		}
 	}
 }

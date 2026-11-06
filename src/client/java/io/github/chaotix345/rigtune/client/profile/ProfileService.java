@@ -671,23 +671,20 @@ public final class ProfileService {
 	// null for "My settings", while no profile stands, or when history.json can't be read.
 	public ProfileHold.@Nullable Active hold() {
 		ProfileStore.Snapshot profiles = store().snapshot();
-		String id = profiles.active();
-		String entryId = profiles.activeEntry();
-		if (id == null || entryId == null) {
+		if (profiles.active() == null) {
 			return null;
 		}
-		Profile profile = profiles.profiles().stream().filter(p -> id.equals(p.id())).findFirst().orElse(null);
-		if (profile != null && ProfileStore.SOURCE_BASELINE.equals(profile.source())) {
+		Journal.State state;
+		List<JournalEntry> entries;
+		try {
+			Journal journal = ClientJournal.get();
+			state = journal.state();
+			entries = journal.entries();
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read RigTune's history", e);
 			return null;
 		}
-		Journal journal = ClientJournal.get();
-		if (journal.state() != Journal.State.OK || !ActiveProfile.inEffect(entryId, journal.state(), journal.entries())) {
-			return null;
-		}
-		JournalEntry entry = journal.entries().stream().filter(e -> entryId.equals(e.id())).findFirst().orElse(null);
-		Text name = resolvedName(id, profiles);
-		List<ProfileHold.Hold> holds = ProfileHold.holds(entry);
-		return name == null || holds.isEmpty() ? null : new ProfileHold.Active(name, holds);
+		return ProfileHold.active(profiles, state, entries, id -> resolvedName(id, profiles));
 	}
 
 	// v0.5 C16 (WS-P2, read-only): the active profile's id, while the switch that made it active still stands.

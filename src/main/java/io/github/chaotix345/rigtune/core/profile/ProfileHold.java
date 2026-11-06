@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.profile;
 
+import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -11,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 // #45, the main list's post-step after FixHold (V05Hooks.afterRecommend): while a profile the player switched to stands,
 // a SetSetting that would move a key the switch set away from the profile's value is unticked, with a reason naming the
@@ -29,6 +31,29 @@ public final class ProfileHold {
 	}
 
 	private ProfileHold() {
+	}
+
+	// ProfileService.hold(): the active profile's holds with its name (names: ProfileService's), or null for "My settings"
+	// (the baseline profile), while no switch stands (ActiveProfile: undone, or never journaled), for a profile whose name
+	// no longer resolves, and whenever history.json isn't readable as OK (nothing is held on a guess).
+	public static @Nullable Active active(ProfileStore.Snapshot profiles, Journal.State state, List<JournalEntry> entries,
+			Function<String, @Nullable Text> names) {
+		String id = profiles.active();
+		String entryId = profiles.activeEntry();
+		if (id == null || entryId == null || state != Journal.State.OK) {
+			return null;
+		}
+		ProfileStore.Profile profile = profiles.profile(id);
+		if (profile != null && ProfileStore.SOURCE_BASELINE.equals(profile.source())) {
+			return null;
+		}
+		if (!ActiveProfile.inEffect(entryId, state, entries)) {
+			return null;
+		}
+		JournalEntry entry = entries.stream().filter(e -> entryId.equals(e.id())).findFirst().orElse(null);
+		Text name = names.apply(id);
+		List<Hold> holds = holds(entry);
+		return name == null || holds.isEmpty() ? null : new Active(name, holds);
 	}
 
 	// The setting changes of the switch's journal entry that are applied or staged.
@@ -66,7 +91,7 @@ public final class ProfileHold {
 	}
 
 	private static Recommendation hold(Recommendation r, Active active) {
-		if (!(r.action() instanceof Action.SetSetting set)) {
+		if (!(r.action() instanceof Action.SetSetting set) || !r.selectedByDefault()) {
 			return r;
 		}
 		for (Hold hold : active.holds()) {
