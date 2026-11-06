@@ -979,11 +979,20 @@
 		{
 			"id": "stutter-chunks-loading-tag",
 			"requires": ["stutter-doctor"],
-			"when": { "stutterTaggedShareAtLeast": { "chunksLoading": 60 }, "spikesPerMinuteAtLeast": 20 },
+			"when": { "stutterTaggedShareAtLeast": { "chunksLoading": 60 }, "spikesPerMinuteAtLeast": 20, "modPresent": ["sodium"], "anyOf": [ { "settingIs": { "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES" } }, { "settingIs": { "sodium.performance.chunk_build_defer_mode": "ONE_FRAME" } } ], "not": { "stutterShareAtLeast": { "chunkLoad": 30 } } },
 			"kind": "info",
 			"impact": "low",
 			"title": "Hitches while chunks were loading",
-			"text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them."
+			"text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them. RigTune can't measure what loading chunks costs here, so it has no fix to try for it: change one of these yourself and compare sessions."
+		},
+		{
+			"id": "stutter-chunks-loading-tag-rd",
+			"requires": ["stutter-doctor"],
+			"when": { "stutterTaggedShareAtLeast": { "chunksLoading": 60 }, "spikesPerMinuteAtLeast": 20, "not": { "anyOf": [ { "stutterShareAtLeast": { "chunkLoad": 30 } }, { "modPresent": ["sodium"], "anyOf": [ { "settingIs": { "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES" } }, { "settingIs": { "sodium.performance.chunk_build_defer_mode": "ONE_FRAME" } } ] } ] } },
+			"kind": "info",
+			"impact": "low",
+			"title": "Hitches while chunks were loading",
+			"text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter may reduce them, and if you fly or explore a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play. RigTune can't measure what loading chunks costs here, so it has no fix to try for it: lower the render distance yourself and compare sessions."
 		}
 	],
 	"stutterFixes": [

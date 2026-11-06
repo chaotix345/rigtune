@@ -114,6 +114,49 @@ class ChunksLoadingSeedTest {
 		return new StutterFacts(Map.of("unknown", 100.0), Map.of(Attributor.CHUNKS_LOADING, share), 0, 0, 0, 40.0, 8192L, null, perMinute, "g1", true, Set.of());
 	}
 
+	static final String RD_ONLY = "stutter-chunks-loading-tag-rd";
+
+	static List<String> fired(StutterFacts facts, Map<String, String> settings, String... mods) {
+		EvalContext ctx = StutterAdvisor.context(RULES, Fixtures.userRig().build(), Fixtures.mods(mods), new SettingsSnapshot(settings), Goal.BALANCED, facts);
+		return StutterAdvisor.evaluate(RULES, ctx).stream().map(StutterAdvisor.Fired::id).toList();
+	}
+
+	// #44: Sodium's Chunk Updates is suggested only while it isn't already Deferred (ALWAYS); otherwise, and without
+	// Sodium, the render-distance text (with Chunky's pre-generation) fires instead. Never both.
+	@Test
+	void sodiumIsSuggestedOnlyWhileChunkUpdatesArentDeferred() {
+		StutterFacts facts = tagged(80, 30.0);
+		for (String mode : List.of("ZERO_FRAMES", "ONE_FRAME")) {
+			List<String> ids = fired(facts, Map.of(StutterSeedScenarioTest.DEFER, mode), "sodium");
+			assertTrue(ids.contains(SEED) && !ids.contains(RD_ONLY), mode + ": " + ids);
+		}
+		List<String> deferred = fired(facts, Map.of(StutterSeedScenarioTest.DEFER, "ALWAYS"), "sodium");
+		assertTrue(deferred.contains(RD_ONLY) && !deferred.contains(SEED), deferred.toString());
+		List<String> noSodium = fired(facts, Map.of());
+		assertTrue(noSodium.contains(RD_ONLY) && !noSodium.contains(SEED), noSodium.toString());
+		RulesDocument.AdviceRule rdOnly = RULES.stutterAdvice.stream().filter(a -> RD_ONLY.equals(a.id)).findFirst().orElseThrow();
+		assertFalse(rdOnly.text.contains("Sodium"), rdOnly.text);
+		assertTrue(rdOnly.text.contains("render distance") && rdOnly.text.contains("Chunky"), rdOnly.text);
+		assertEquals(List.of(StutterAdvisor.FEATURE), rdOnly.requires);
+		assertEquals("info", rdOnly.kind);
+	}
+
+	// #48: in singleplayer on fast hardware chunk loading is never measured (packet time), so the tag advice says there's
+	// no fix to try; when it is measured, the measured advice (which can offer the fix) shows instead of the tag's.
+	@Test
+	void theTagAdviceSaysWhyThereIsNoFixAndStandsAsideForTheMeasuredOne() {
+		for (String id : List.of(SEED, RD_ONLY)) {
+			String text = RULES.stutterAdvice.stream().filter(a -> id.equals(a.id)).findFirst().orElseThrow().text;
+			assertTrue(text.contains("RigTune can't measure what loading chunks costs here, so it has no fix to try for it"), text);
+		}
+		StutterFacts measured = new StutterFacts(Map.of(Attributor.CHUNK_LOAD, 45.0, "unknown", 55.0), Map.of(Attributor.CHUNKS_LOADING, 80.0), 0, 0,
+				0, 40.0, 8192L, null, 30.0, "g1", true, Set.of());
+		for (Map<String, String> settings : List.of(Map.of(StutterSeedScenarioTest.DEFER, "ONE_FRAME"), Map.of(StutterSeedScenarioTest.DEFER, "ALWAYS"))) {
+			List<String> ids = fired(measured, settings, "sodium");
+			assertTrue(ids.contains("stutter-chunk-loading") && !ids.contains(SEED) && !ids.contains(RD_ONLY), settings + ": " + ids);
+		}
+	}
+
 	@Test
 	void theSeedIsAnInfoForTheStutterDoctorOnly() {
 		RulesDocument.AdviceRule seed = RULES.stutterAdvice.stream().filter(a -> SEED.equals(a.id)).findFirst().orElseThrow();
