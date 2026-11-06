@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 21,
-  "generatedAt": "2026-11-06T10:35:39Z",
+  "revision": 22,
+  "generatedAt": "2026-11-06T17:04:53Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -995,7 +995,7 @@
       },
       "impact": "medium",
       "defaultSelected": false,
-      "reason": "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it."
+      "reason": "On this PC's estimated tier, 12 chunks is a good balance of view distance and frame rate; the benchmark can fine-tune it."
     },
     {
       "key": "vanilla.renderDistance",

@@ -1,5 +1,8 @@
 package io.github.chaotix345.rigtune.core.launcher;
 
+import io.github.chaotix345.rigtune.core.Fixtures;
+import io.github.chaotix345.rigtune.core.model.HardwareProfile;
+import io.github.chaotix345.rigtune.core.rules.ConditionEvaluator;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumMap;
@@ -9,6 +12,8 @@ import static io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy.LAUNCHER
 import static io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy.PENDING;
 import static io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy.RIGTUNE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 4a, AC4a.1: the policy table, row by row in its order, for every Launcher value x .index/ {absent,
 // present, not listed yet} x opt-in x detection {done, pending}.
@@ -115,5 +120,20 @@ class ModFilesPolicyTest {
 		assertEquals(false, RIGTUNE.launcherManages());
 		assertEquals(true, LAUNCHER.launcherManages());
 		assertEquals(true, PENDING.launcherManages());
+	}
+
+	// #37: the rules' launcher-mods flag only under LAUNCHER (PENDING may still turn out RIGTUNE); the probe's flags stay.
+	@Test
+	void onlyALauncherThatKeepsTheModsFlagsTheProfile() {
+		Fixtures.Hw rig = Fixtures.userRig();
+		rig.flags = java.util.Set.of("shaders-enabled");
+		HardwareProfile hw = rig.build();
+		HardwareProfile flagged = LAUNCHER.flagged(hw);
+		assertEquals(java.util.Set.of("shaders-enabled", ConditionEvaluator.LAUNCHER_MODS_FLAG), flagged.flags());
+		assertEquals(hw.cpu(), flagged.cpu());
+		assertSame(flagged, LAUNCHER.flagged(flagged));
+		assertSame(hw, PENDING.flagged(hw));
+		assertSame(hw, RIGTUNE.flagged(hw));
+		assertTrue(ConditionEvaluator.knownFlag(ConditionEvaluator.LAUNCHER_MODS_FLAG), "absent reads FALSE, not UNKNOWN, on 0.5.2+");
 	}
 }

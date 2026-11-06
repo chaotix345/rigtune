@@ -487,14 +487,21 @@ class GeneratedV05Tests(unittest.TestCase):
         self.assertIn("shaders-entry-level", [a["id"] for a in self.v2["advice"]])
 
     # AC2R.1: against r16, the settings are the same entries in the same order and only L4's seven reasons differ, in both
-    # files (so keys, values, bounds, conditions and ticks are untouched).
+    # files (so keys, values, bounds, conditions and ticks are untouched). Since 0.5.2 (r22): #37's Distant Horizons
+    # auto-updater entry is new (v2 only), and #47's tier-4 render distance reason no longer argues only for raising it.
     def test_l4_changed_only_reasons(self):
         r16_v1 = repo_json("src", "test", "resources", "rules", "r16", "rules-v1.json")
+        tier4 = "On this PC's estimated tier, 12 chunks is a good balance of view distance and frame rate; the benchmark can fine-tune it."
         for name, old, new in (("rules-v2.json", self.r16, self.v2), ("rules-v1.json", r16_v1, self.v1)):
-            self.assertEqual(len(old["settings"]), len(new["settings"]), name)
+            settings = [s for s in new["settings"] if s["key"] != "dh.client.advanced.autoUpdater.enableAutoUpdater"]
+            self.assertEqual(len(new["settings"]) - len(settings), 1 if name == "rules-v2.json" else 0, name)
+            self.assertEqual(len(old["settings"]), len(settings), name)
             changed = []
-            for i, (before, after) in enumerate(zip(old["settings"], new["settings"])):
+            for i, (before, after) in enumerate(zip(old["settings"], settings)):
                 self.assertEqual({k: v for k, v in before.items() if k != "reason"}, {k: v for k, v in after.items() if k != "reason"}, f"{name} settings[{i}]")
+                if after.get("reason") == tier4:
+                    self.assertEqual(before["reason"], "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it.", name)
+                    continue
                 if before.get("reason") != after.get("reason"):
                     changed.append(i)
                     self.assertIn("entry-level", before["reason"], f"{name} settings[{i}]")
@@ -541,16 +548,27 @@ class GeneratedV05Tests(unittest.TestCase):
             self.assertEqual(new.get("minModVersion"), old.get("minModVersion"))
 
     # L2 (SPEC 2S): one info entry on the tag, calibrated on P5C-F1's re-runs and AC5.8's A control (ChunksLoadingSeedTest).
+    # 0.5.2 (#44, #48): the tag entry keeps r21's condition (so it's TRUE whenever r21's was, a missing Sodium setting or
+    # unmeasured phase timing included) without the Sodium half, says when a fix is offered, and a second entry suggests
+    # Deferred only while Chunk Updates is known not to be.
     def test_the_l2_seed(self):
+        tag = {"stutterTaggedShareAtLeast": {"chunksLoading": 60}, "spikesPerMinuteAtLeast": 20}
         seed = self.stutter("stutter-chunks-loading-tag")
-        self.assertEqual(seed["requires"], ["stutter-doctor"])
-        self.assertEqual((seed["kind"], seed["impact"]), ("info", "low"))
-        self.assertEqual(seed["when"], {"stutterTaggedShareAtLeast": {"chunksLoading": 60}, "spikesPerMinuteAtLeast": 20})
+        sodium = self.stutter("stutter-chunks-loading-tag-sodium")
+        self.assertEqual(seed["when"], tag)
+        self.assertEqual(sodium["when"], dict(tag, modPresent=["sodium"], anyOf=[
+            {"settingIs": {"sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"}},
+            {"settingIs": {"sodium.performance.chunk_build_defer_mode": "ONE_FRAME"}}]))
+        self.assertNotIn("Sodium", seed["text"])
         self.assertIn("happened while chunks were loading", seed["text"])
-        self.assertIn("may reduce them", seed["text"])
-        self.assertNotIn("v1", seed)
+        self.assertIn("RigTune offers a fix to try only when it could measure", seed["text"])
+        self.assertIn("Deferred", sodium["text"])
+        for rule in (seed, sodium):
+            self.assertEqual(rule["requires"], ["stutter-doctor"])
+            self.assertEqual((rule["kind"], rule["impact"]), ("info", "low"))
+            self.assertIn("may reduce them", rule["text"])
+            self.assertNotIn("v1", rule)
         self.assertNotIn("stutterAdvice", self.v1)
-
 
 if __name__ == "__main__":
     unittest.main()

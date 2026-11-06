@@ -114,6 +114,70 @@ class ChunksLoadingSeedTest {
 		return new StutterFacts(Map.of("unknown", 100.0), Map.of(Attributor.CHUNKS_LOADING, share), 0, 0, 0, 40.0, 8192L, null, perMinute, "g1", true, Set.of());
 	}
 
+	static final String SODIUM = "stutter-chunks-loading-tag-sodium";
+	static final Set<String> NO_PHASE_TIMING = Set.of(Attributor.RENDER, Attributor.CHUNK_LOAD, Attributor.CHUNK_BUILD, Attributor.TICK);
+
+	static List<String> fired(StutterFacts facts, Map<String, String> settings, String... mods) {
+		EvalContext ctx = StutterAdvisor.context(RULES, Fixtures.userRig().build(), Fixtures.mods(mods), new SettingsSnapshot(settings), Goal.BALANCED, facts);
+		return StutterAdvisor.evaluate(RULES, ctx).stream().map(StutterAdvisor.Fired::id).toList();
+	}
+
+	static StutterFacts tagged(double share, double perMinute, Map<String, Double> causes, Set<String> unmeasured) {
+		return new StutterFacts(causes, Map.of(Attributor.CHUNKS_LOADING, share), 0, 0, 0, 40.0, 8192L, null, perMinute, "g1", true, unmeasured);
+	}
+
+	static String text(String id) {
+		return RULES.stutterAdvice.stream().filter(a -> id.equals(a.id)).findFirst().orElseThrow().text;
+	}
+
+	// #44: the tag advice no longer names Sodium; a second entry suggests Deferred only while Chunk Updates is known to be
+	// Immediate or Soon, so it never fires when it's already Deferred (ALWAYS) or Sodium isn't there.
+	@Test
+	void sodiumIsSuggestedOnlyWhileChunkUpdatesArentDeferred() {
+		StutterFacts facts = tagged(80, 30.0);
+		for (String mode : List.of("ZERO_FRAMES", "ONE_FRAME")) {
+			List<String> ids = fired(facts, Map.of(StutterSeedScenarioTest.DEFER, mode), "sodium");
+			assertTrue(ids.contains(SEED) && ids.contains(SODIUM), mode + ": " + ids);
+		}
+		List<String> deferred = fired(facts, Map.of(StutterSeedScenarioTest.DEFER, "ALWAYS"), "sodium");
+		assertTrue(deferred.contains(SEED) && !deferred.contains(SODIUM), deferred.toString());
+		List<String> noSodium = fired(facts, Map.of());
+		assertTrue(noSodium.contains(SEED) && !noSodium.contains(SODIUM), noSodium.toString());
+		assertFalse(text(SEED).contains("Sodium"), text(SEED));
+		assertTrue(text(SEED).contains("render distance") && text(SEED).contains("Chunky"), text(SEED));
+		assertTrue(text(SODIUM).contains("Deferred") && text(SODIUM).contains("may reduce them"), text(SODIUM));
+		RulesDocument.AdviceRule sodium = RULES.stutterAdvice.stream().filter(a -> SODIUM.equals(a.id)).findFirst().orElseThrow();
+		assertEquals(List.of(StutterAdvisor.FEATURE), sodium.requires);
+		assertEquals("info", sodium.kind);
+	}
+
+	// PR #60 review: a session without phase timing (chunkLoad unmeasured: UNKNOWN) or with Sodium's setting missing
+	// from the snapshot still gets the tag advice, as under r21; the Sodium entry needs the setting known.
+	@Test
+	void unmeasuredPhasesOrAMissingSodiumSettingStillGetTheAdvice() {
+		StutterFacts noPhases = tagged(80, 30.0, Map.of(Attributor.UNKNOWN, 100.0), NO_PHASE_TIMING);
+		for (Map<String, String> settings : List.of(Map.of(StutterSeedScenarioTest.DEFER, "ONE_FRAME"), Map.of(StutterSeedScenarioTest.DEFER, "ALWAYS"),
+				Map.<String, String>of())) {
+			List<String> ids = fired(noPhases, settings, "sodium");
+			assertTrue(ids.contains(SEED), settings + ": " + ids);
+			assertEquals(settings.containsValue("ONE_FRAME"), ids.contains(SODIUM), settings + ": " + ids);
+		}
+		assertTrue(fired(noPhases, Map.of()).contains(SEED), "no Sodium, no phase timing");
+		List<String> missing = fired(tagged(80, 30.0), Map.of(), "sodium");
+		assertTrue(missing.contains(SEED) && !missing.contains(SODIUM), "Sodium without its setting in the snapshot: " + missing);
+	}
+
+	// #48: in singleplayer on fast hardware chunk loading is never measured (packet time), so no fix is offered; the tag
+	// advice says when one is. Its sentence holds next to the measured advice too, which may offer the fix.
+	@Test
+	void theTagAdviceSaysWhenAFixIsOffered() {
+		assertTrue(text(SEED).contains("RigTune offers a fix to try only when it could measure what loading chunks cost (\"Stutter while loading chunks\")"),
+				text(SEED));
+		StutterFacts measured = tagged(80, 30.0, Map.of(Attributor.CHUNK_LOAD, 45.0, Attributor.UNKNOWN, 55.0), Set.of());
+		List<String> ids = fired(measured, Map.of(StutterSeedScenarioTest.DEFER, "ALWAYS"), "sodium");
+		assertTrue(ids.contains("stutter-chunk-loading") && ids.contains(SEED), ids.toString());
+	}
+
 	@Test
 	void theSeedIsAnInfoForTheStutterDoctorOnly() {
 		RulesDocument.AdviceRule seed = RULES.stutterAdvice.stream().filter(a -> SEED.equals(a.id)).findFirst().orElseThrow();
@@ -122,6 +186,6 @@ class ChunksLoadingSeedTest {
 		assertTrue(RULES.advice.stream().noneMatch(a -> SEED.equals(a.id)));
 		String text = seed.text.toLowerCase(Locale.ROOT);
 		assertTrue(text.contains("happened while chunks were loading"), seed.text);
-		assertTrue(text.contains("render distance") && text.contains("deferred") && text.contains("may reduce"), seed.text);
+		assertTrue(text.contains("render distance") && text.contains("may reduce"), seed.text);
 	}
 }

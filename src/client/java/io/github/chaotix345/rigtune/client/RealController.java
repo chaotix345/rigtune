@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.benchmark.RunRebuilds;
 import io.github.chaotix345.rigtune.client.benchmark.TrendService;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.jvm.JvmService;
@@ -126,6 +127,8 @@ public final class RealController implements RigTuneController {
 	});
 
 	private Minecraft minecraft;
+	// A lambda, not BenchmarkController::measuring: the method reference would load that class at construction.
+	private final RunRebuilds runRebuilds = new RunRebuilds(() -> BenchmarkController.measuring());
 	private final Path configDir;
 	private final Path modsDir;
 	private final Path pendingFile;
@@ -217,6 +220,11 @@ public final class RealController implements RigTuneController {
 
 	public void start(Minecraft minecraft) {
 		this.minecraft = minecraft;
+		RunRebuilds.onRestored(() -> {
+			if (runRebuilds.release()) {
+				rebuild();
+			}
+		});
 		reloadRules();
 		rescan();
 		// v0.5 (PLAN contracts 13d): the features' start-time work, one Probes.EXECUTOR task.
@@ -359,7 +367,7 @@ public final class RealController implements RigTuneController {
 			RulesDocument doc = rules;
 			HardwareProfile hw = hardware;
 			List<InstalledMod> scanned = mods;
-			if (doc == null || hw == null || scanned == null) {
+			if (doc == null || hw == null || scanned == null || runRebuilds.defer()) {
 				return;
 			}
 			SettingsSnapshot settings = SettingsBridge.read(minecraft);
@@ -372,7 +380,7 @@ public final class RealController implements RigTuneController {
 						Set<String> loaded = ModScanner.loadedIds();
 						List<Op> dropped = dropQueuedUpdates(queued, loaded);
 						List<Op> stale = dropStaleGroups(loaded);
-						Report built = ServerCap.apply(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), live, doc);
+						Report built = ServerCap.apply(Recommender.recommend(doc, launcherFlagged(hw), scanned, settings, data, g, modVersion, queued), live, doc);
 						// v0.5 (PLAN contracts 13a): the report post-steps, after ServerCap; ModrinthOffAdvice stays last.
 						return new Rebuilt(V05Hooks.afterRecommend(built, new V05Hooks.StepContext(this, doc, live)), dropped, stale, queued, loaded);
 					}, Probes.EXECUTOR)
@@ -397,6 +405,16 @@ public final class RealController implements RigTuneController {
 	}
 
 	private record Rebuilt(Report report, List<Op> dropped, List<Op> stale, Set<String> queued, Set<String> loaded) {
+	}
+
+	// #37: the rules' launcher-mods flag while the launcher keeps the mod list; a failing check leaves hw as it is.
+	private HardwareProfile launcherFlagged(HardwareProfile hw) {
+		try {
+			return modFiles().flagged(hw);
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("RigTune: could not tell who manages the mods for the report", e);
+			return hw;
+		}
 	}
 
 	// Also at exit: an updater can have queued its build since the last rebuild.

@@ -18,6 +18,8 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.recommend.ModConflicts;
+import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -256,6 +258,21 @@ class DownloadPlannerTest {
 		}
 		assertFalse(fetched.contains("kryptonV.jar"));
 		assertFalse(fetched.contains("noiseV.jar"));
+	}
+
+	// Rules r21 (PR #55 review): Krypton no longer conflicts with Fast Noise in the bundled rules, so ticking both stages both.
+	@Test
+	void kryptonAndFastNoiseAreStagedTogetherWithTheBundledRules() {
+		put("krypton", version("kryptonV", "KRYPTON", "1", T));
+		put("zfastnoise", version("noiseV", "NOISE", "1", T));
+		conflicts = ModConflicts.of(RulesLoader.loadBundled())::between;
+		assertTrue(conflicts.test("krypton", "e4mc"), "the bundled rules are r21 or later");
+
+		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("zfastnoise", "NOISE"));
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("add-krypton", "add-zfastnoise"), result.ids());
+		assertEquals(Set.of("kryptonV.jar", "noiseV.jar"), Set.copyOf(targets(result.ops())));
 	}
 
 	// 2e: refused together even when one side would have failed anyway.

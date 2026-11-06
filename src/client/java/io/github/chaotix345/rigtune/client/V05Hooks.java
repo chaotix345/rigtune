@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.ServerLimits;
+import io.github.chaotix345.rigtune.core.profile.ProfileHold;
 import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.stutter.FixHold;
@@ -43,11 +44,12 @@ public final class V05Hooks {
 	}
 
 	// The report post-step list, on the rebuild's worker after ServerCap (ModrinthOffAdvice stays last, on the render
-	// thread): C20's FixHold (WS-S2), then P0.4's LauncherModAdvice (WS-L1).
+	// thread): C20's FixHold (WS-S2), 0.5.2's ProfileHold (#45), then P0.4's LauncherModAdvice (WS-L1).
 	public static Report afterRecommend(Report report, StepContext context) {
 		RealController controller = context.controller();
 		Report held = postStep("FixHold.apply", report, r -> FixHold.apply(r, controller.v05().stutterFixes().holds()));
-		return postStep("LauncherModAdvice.apply", held, r -> LauncherModAdvice.apply(r, controller.modFiles(), controller.launcher()));
+		Report profiled = postStep("ProfileHold.apply", held, r -> ProfileHold.apply(r, controller.profileService().hold()));
+		return postStep("LauncherModAdvice.apply", profiled, r -> LauncherModAdvice.apply(r, controller.modFiles(), controller.launcher()));
 	}
 
 	// At the top of RealController.apply(selected, entryId): P0.4's guard (WS-L1) drops what the policy forbids.

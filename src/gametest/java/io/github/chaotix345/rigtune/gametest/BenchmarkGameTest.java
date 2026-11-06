@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
@@ -29,6 +30,8 @@ import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
+import io.github.chaotix345.rigtune.core.model.Action;
+import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterStore;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -345,6 +348,23 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 
 	// docs/v0.3/SPEC.md AC8.3: the integrated server's requested view distance (what it sends chunks for) equals the
 	// restored render distance. The packet is handled on a server tick, so this polls.
+	private static boolean builtAfter(Report report, Instant asked) {
+		return report != null && report.createdAt().isAfter(asked);
+	}
+
+	// The current values the report's setting rows for the run's knobs read.
+	private static Map<String, String> reportedValues(Minecraft mc) {
+		Map<String, String> out = new java.util.TreeMap<>();
+		Report report = RigTuneClient.controller().report();
+		for (var r : report == null ? List.<io.github.chaotix345.rigtune.core.model.Recommendation>of() : report.recommendations()) {
+			if (r.action() instanceof Action.SetSetting set
+					&& List.of("vanilla.maxFps", "vanilla.enableVsync", "vanilla.renderDistance").contains(set.key())) {
+				out.put(set.key(), set.currentValue());
+			}
+		}
+		return out;
+	}
+
 	private static void checkRequestedViewDistance(ClientGameTestContext context, int expected, String when) {
 		int requested = awaitRequestedViewDistance(context, rd -> rd == expected, when);
 		RigTune.LOGGER.info("Benchmark game test: server's requested view distance {} {} (render distance {})", requested, when, expected);
@@ -472,7 +492,23 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			context.waitTicks(20);
 			check(context.computeOnClient(mc -> BenchmarkController.running() && !mc.options.enableVsync().get()), "uncapped while measuring");
 			context.takeScreenshot("bench-tune-running");
+			// #42: a rebuild asked for mid-run (as the integrated server's view-distance updates do) publishes no report from
+			// the run's knobs; one runs after finish() restores the settings, and reads the player's own.
+			Instant asked = Instant.now();
+			check(context.computeOnClient(mc -> RigTuneClient.controller() instanceof RealController), "the real controller");
+			context.runOnClient(mc -> ((RealController) RigTuneClient.controller()).rebuild());
+			context.waitTicks(10);
+			check(context.computeOnClient(mc -> !BenchmarkController.measuring() || !builtAfter(RigTuneClient.controller().report(), asked)),
+					"no report built while the run's settings are applied");
 			context.waitFor(mc -> !BenchmarkController.running(), RUN_TIMEOUT_TICKS);
+			context.waitFor(mc -> builtAfter(RigTuneClient.controller().report(), asked), 200);
+			Map<String, String> readNow = context.computeOnClient(BenchmarkGameTest::reportedValues);
+			Settings own = context.computeOnClient(Settings::of);
+			check(readNow.entrySet().stream().allMatch(e -> e.getValue().equals(switch (e.getKey()) {
+				case "vanilla.maxFps" -> Integer.toString(own.maxFps());
+				case "vanilla.enableVsync" -> Boolean.toString(own.vsync());
+				default -> Integer.toString(own.rd());
+			})), "the report after the restore reads the player's settings: " + readNow + " vs " + own);
 			BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
 			check(outcome != null && !outcome.cancelled() && outcome.record() != null, "tune finished: " + outcome);
 			check(!outcome.session().deadlineHit(), "the short run stays inside the deadline");

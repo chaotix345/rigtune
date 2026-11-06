@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 - New upstream mods to triage: 6
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 1
-- Rules changed or omitted in rules-v1.json: 49
+- Rules changed or omitted in rules-v1.json: 50
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 | slug | title | pack(s) | optimization category |
@@ -58,9 +58,10 @@ None found.
 | settings[50] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
 | settings[51] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
 | settings[52] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[53] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[53] dh.client.advanced.autoUpdater.enableAutoUpdater | omitted ("v1": false) |
 | settings[54] iris.maxShadowRenderDistance | omitted ("v1": false) |
 | settings[55] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[56] iris.maxShadowRenderDistance | omitted ("v1": false) |
 | advice[ram-distant-horizons] | v1 override: when |
 | advice[ram-shaders] | v1 override: when |
 | advice[ram-distant-horizons-shaders-limited] | omitted ("v1": false) |

@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.rules.ConditionEvaluator;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
@@ -28,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // The v0.2 knowledge (SPEC items 9, 7 and AC2.3) over the bundled rules-v2.json.
@@ -396,6 +398,25 @@ class KnowledgeV2ScenarioTest {
 		}
 	}
 
+	// #37: in an instance whose launcher keeps the mod list (the launcher-mods flag, ModFilesPolicy.LAUNCHER), Distant
+	// Horizons' auto-updater replacing its own jar breaks the launcher's record, so RigTune suggests turning it off (a
+	// setting: one click, undone in History). Elsewhere, or with it already off, nothing changes.
+	@Test
+	void dhAutoUpdaterOffWhereTheLauncherKeepsTheMods() {
+		String autoUpdater = "dh.client.advanced.autoUpdater.enableAutoUpdater";
+		Map<String, String> on = with(DH_DEFAULTS, autoUpdater, "true");
+		Map<String, Recommendation> managed = run(withFlags(Fixtures.userRig(), ConditionEvaluator.LAUNCHER_MODS_FLAG), DH_MODS, on);
+		assertEquals("false", target(managed, autoUpdater));
+		Recommendation rec = managed.get("set:" + autoUpdater);
+		assertTrue(rec.selectedByDefault());
+		assertTrue(rec.reason().contains("update Distant Horizons in your launcher"), rec.reason());
+		assertEquals("Distant Horizons: Auto Updater: On → Off", rec.titleText().english());
+		assertNull(target(run(Fixtures.userRig(), DH_MODS, on), autoUpdater), "no launcher keeps the mods");
+		assertNull(target(run(withFlags(Fixtures.userRig(), ConditionEvaluator.LAUNCHER_MODS_FLAG), DH_MODS, with(DH_DEFAULTS, autoUpdater, "false")),
+				autoUpdater), "already off");
+		assertNull(target(run(withFlags(Fixtures.userRig(), ConditionEvaluator.LAUNCHER_MODS_FLAG), List.of("sodium"), on), autoUpdater), "no DH");
+	}
+
 	// Phase 5 finding 2: the vanilla render-distance clamps are about Distant Horizons drawing the far terrain.
 	@Test
 	void dhRenderDistanceClampOnlyWhileDhRenders() {
@@ -442,9 +463,13 @@ class KnowledgeV2ScenarioTest {
 			assertFalse(laptop.get("add:krypton").reason().contains("RigTune doesn't also offer"), laptop.get("add:krypton").reason());
 		}
 
-		// Additive ships Krypton with both: no conflict warning between them.
-		Map<String, Recommendation> additive = run(Fixtures.userRig(), "sodium", "lithium", "krypton", "zfastnoise", "zmatcomp");
-		assertTrue(additive.keySet().stream().noneMatch(id -> id.startsWith("conflict:") && id.contains("krypton")), additive.keySet().toString());
+		// Additive (a 26.3 pack) ships Krypton with both: no conflict warning between them, on either version.
+		for (String mc : List.of("26.2", "26.3")) {
+			Fixtures.Hw hw = Fixtures.userRig();
+			hw.mcVersion = mc;
+			Map<String, Recommendation> additive = run(hw, "sodium", "lithium", "krypton", "zfastnoise", "zmatcomp");
+			assertTrue(additive.keySet().stream().noneMatch(id -> id.startsWith("conflict:") && id.contains("krypton")), mc + " " + additive.keySet());
+		}
 	}
 
 	// Krypton issues #169/#170 (Nov 2026): the published Krypton 0.3.1 (26.2) and 0.3.2 (26.3) jars still @Redirect the login
@@ -459,6 +484,7 @@ class KnowledgeV2ScenarioTest {
 			Map<String, Recommendation> withE4mc = run(hw, "sodium", "e4mc");
 			assertFalse(withE4mc.containsKey("add:krypton"), mc + " " + withE4mc.keySet());
 			Map<String, Recommendation> both = run(hw, "sodium", "e4mc", "krypton");
+			assertTrue(both.containsKey("conflict:e4mc+krypton"), mc + " " + both.keySet());
 			assertEquals(Category.WARNING, both.get("conflict:e4mc+krypton").category(), mc + " " + both.keySet());
 		}
 	}
@@ -534,7 +560,7 @@ class KnowledgeV2ScenarioTest {
 		Set<String> drivers = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
 		Set<String> stutter = rules.stutterAdvice.stream().map(a -> a.id).collect(Collectors.toSet());
 		assertEquals(9, jvm.size(), jvm.toString());
-		assertEquals(6, stutter.size(), "r16's five and v0.5's L2 seed");
+		assertEquals(7, stutter.size(), "r16's five, v0.5's L2 seed and its 0.5.2 split (#44)");
 		assertEquals(Set.of("driver-nvidia-threaded-optimization", "driver-intel-gen7-old"), drivers);
 
 		Fixtures.Hw oldNvidia = Fixtures.userRig();

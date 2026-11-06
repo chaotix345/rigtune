@@ -29,7 +29,8 @@ class LegacyParserTest {
 	// docs/v0.5/SPEC.md "Compatibility promise" (0.4.x), AC2S.4, AC5.2: what the release revision R adds over r16 for 0.4.0.
 	// (The same list as LegacyRulesParseTest's.)
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of("old-client-launcher-mods");
-	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag");
+	static final List<String> SETTINGS_ADDED_SINCE_R16 = List.of("dh.client.advanced.autoUpdater.enableAutoUpdater");
+	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag", "stutter-chunks-loading-tag-sodium");
 
 	private static String bundled() throws IOException {
 		try (InputStream in = RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE)) {
@@ -114,7 +115,9 @@ class LegacyParserTest {
 	void theReleasedParserReadsRWithR16sCountsPlusTheAdditions() throws IOException {
 		RulesDocument r = parse040(bundled());
 		RulesDocument r16 = parse040(r16());
-		assertEquals(r16.settings.stream().map(s -> s.key).toList(), r.settings.stream().map(s -> s.key).toList());
+		assertEquals(r16.settings.stream().map(s -> s.key).toList(),
+				r.settings.stream().map(s -> s.key).filter(k -> !SETTINGS_ADDED_SINCE_R16.contains(k)).toList());
+		assertEquals(r16.settings.size() + SETTINGS_ADDED_SINCE_R16.size(), r.settings.size());
 		assertEquals(plus(r16.advice.stream().map(a -> a.id).toList(), ADVICE_ADDED_SINCE_R16), r.advice.stream().map(a -> a.id).toList());
 		assertNotNull(r.stutterAdvice);
 		assertEquals(plus(r16.stutterAdvice.stream().map(a -> a.id).toList(), STUTTER_ADVICE_ADDED_SINCE_R16),

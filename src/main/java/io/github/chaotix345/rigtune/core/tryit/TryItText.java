@@ -50,6 +50,8 @@ public final class TryItText {
 			case KIND -> Text.of("rigtune.tryit.refused.kind", "Only settings can be tried; mod changes can't.");
 			case UNMEASURABLE -> Text.of("rigtune.tryit.refused.unmeasurable",
 					"Benchmarks always run with the frame rate uncapped, so this setting can't be measured.");
+			case NOT_PERFORMANCE -> Text.of("rigtune.tryit.refused.not_performance",
+					"This setting isn't about performance, so there's nothing to measure.");
 			case PRESET -> Text.of("rigtune.tryit.refused.preset", "This setting changes many others at once, so it can't be tried on its own.");
 			case UNSUPPORTED -> Text.of("rigtune.tryit.refused.unsupported", "RigTune doesn't change this setting, so it can't be tried.");
 			case NO_FILE -> Text.of("rigtune.tryit.refused.no_file", "This setting's config file wasn't found.");
@@ -191,8 +193,13 @@ public final class TryItText {
 			case NO_CLEAR_CHANGE -> out.add(normal(Text.of("rigtune.tryit.verdict.none",
 					"No clear change: 1%% lows %s (average %s), within the ±%s these runs vary by.", low, avg, floor)));
 			case NOT_COMPARABLE -> {
-				out.add(warning(Text.of("rigtune.tryit.verdict.not_comparable",
-						"No verdict: something else changed between the two measurements (%s). Try it again for a verdict.", causes(v.causes(), labels))));
+				// #40: while Distant Horizons generates, trying again at once gets the same answer; say what helps instead.
+				out.add(warning(dhGenerating(v.causes())
+						? Text.of("rigtune.tryit.verdict.not_comparable.dh_generating",
+								"No verdict: something else changed between the two measurements (%s). Let Distant Horizons finish generating first (its Show Generation Progress option shows when it's done), then try it again.",
+								causes(v.causes(), labels))
+						: Text.of("rigtune.tryit.verdict.not_comparable",
+								"No verdict: something else changed between the two measurements (%s). Try it again for a verdict.", causes(v.causes(), labels))));
 				out.add(note(Text.of("rigtune.tryit.verdict.numbers", "For reference only: 1%% lows %s, average %s.", low, avg)));
 			}
 			case NO_NUMBERS -> out.add(warning(Text.of("rigtune.tryit.verdict.no_numbers", "No verdict: one of the measurements has no result.")));
@@ -201,6 +208,10 @@ public final class TryItText {
 			out.add(note(caveat(c)));
 		}
 		return out;
+	}
+
+	static boolean dhGenerating(List<Cause> causes) {
+		return causes.stream().anyMatch(c -> c instanceof Cause.Excluded e && e.why() == Cause.Excluded.Why.DH_GENERATING);
 	}
 
 	public static Text causes(List<Cause> causes, HistoryModel.Labels labels) {
@@ -292,7 +303,7 @@ public final class TryItText {
 	public static Text excludedBefore(boolean freshWorld) {
 		return freshWorld
 				? Text.of("rigtune.tryit.note.fresh_world", "The benchmark world was just created, and its first run can't be compared, so nothing was changed. Start the try again for a verdict.")
-				: Text.of("rigtune.tryit.note.dh_generating", "Distant Horizons was generating terrain during the first measurement, so nothing was changed. Start the try again once it has finished.");
+				: Text.of("rigtune.tryit.note.dh_generating", "Distant Horizons was generating terrain during the first measurement, so nothing was changed. Let it finish generating first (its Show Generation Progress option shows when it's done), then start the try again.");
 	}
 
 	// Why the chain stopped before its run (a note): the benchmark's refusal, or a run that ended without its outcome.

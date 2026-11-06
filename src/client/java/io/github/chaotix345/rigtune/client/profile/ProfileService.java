@@ -31,6 +31,7 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ActiveProfile;
 import io.github.chaotix345.rigtune.core.profile.BatteryPrompt;
 import io.github.chaotix345.rigtune.core.profile.EffectiveSettings;
+import io.github.chaotix345.rigtune.core.profile.ProfileHold;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileNames;
 import io.github.chaotix345.rigtune.core.profile.ProfileNotes;
@@ -664,6 +665,26 @@ public final class ProfileService {
 			return null;
 		}
 		return Journal.idsWithFolded(journal.entries());
+	}
+
+	// #45 (the report post-step, on the rebuild's worker): the settings the active profile's switch set, with its name;
+	// null for "My settings", while no profile stands, or when history.json can't be read.
+	public ProfileHold.@Nullable Active hold() {
+		ProfileStore.Snapshot profiles = store().snapshot();
+		if (profiles.active() == null) {
+			return null;
+		}
+		Journal.State state;
+		List<JournalEntry> entries;
+		try {
+			Journal journal = ClientJournal.get();
+			state = journal.state();
+			entries = journal.entries();
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read RigTune's history", e);
+			return null;
+		}
+		return ProfileHold.active(profiles, state, entries, id -> resolvedName(id, profiles));
 	}
 
 	// v0.5 C16 (WS-P2, read-only): the active profile's id, while the switch that made it active still stands.

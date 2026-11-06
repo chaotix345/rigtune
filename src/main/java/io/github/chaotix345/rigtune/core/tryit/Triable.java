@@ -26,6 +26,9 @@ public final class Triable {
 	// Every benchmark run lifts these (uncapped, VSync off, no inactivity limit), so before and after measure the same.
 	public static final Set<String> LIFTED = Set.of("vanilla.maxFps", "vanilla.enableVsync", "vanilla.inactivityFpsLimit");
 	public static final String PRESET = "vanilla.graphicsPreset";
+	// Settings the rules suggest for another reason than performance (#37: Distant Horizons' auto-updater), so a
+	// measurement can't say anything about them.
+	public static final Set<String> NOT_PERFORMANCE = Set.of("dh.client.advanced.autoUpdater.enableAutoUpdater");
 	public static final String SIMULATION_DISTANCE = "vanilla.simulationDistance";
 
 	// The context differences a key's own change makes, so they don't withhold the verdict (TryItVerdict). DH saves
@@ -43,7 +46,7 @@ public final class Triable {
 	// In check order. ONE: not exactly one item ticked (Preview). BUSY and SCENE: the client shows the shared busy check's
 	// and the benchmark's own text.
 	public enum Refusal {
-		ONE, KIND, UNMEASURABLE, PRESET, UNSUPPORTED, NO_FILE, REMOTE_SD, PENDING, BUSY, SCENE, OPEN, HISTORY, STORAGE
+		ONE, KIND, UNMEASURABLE, NOT_PERFORMANCE, PRESET, UNSUPPORTED, NO_FILE, REMOTE_SD, PENDING, BUSY, SCENE, OPEN, HISTORY, STORAGE
 	}
 
 	// hasConfigFile: a Sodium/DH/Iris key's config file is known (ConfigTargets.forKey). inWorld: a world is open.
@@ -110,6 +113,9 @@ public final class Triable {
 	private static Result classify(String key, Predicate<String> hasConfigFile) {
 		if (LIFTED.contains(key)) {
 			return new Result(null, null, Refusal.UNMEASURABLE);
+		}
+		if (NOT_PERFORMANCE.contains(key)) {
+			return new Result(null, null, Refusal.NOT_PERFORMANCE);
 		}
 		if (PRESET.equals(key)) {
 			return new Result(null, null, Refusal.PRESET);

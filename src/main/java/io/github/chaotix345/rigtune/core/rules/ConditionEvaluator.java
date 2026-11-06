@@ -49,7 +49,9 @@ public final class ConditionEvaluator {
 	public static final Set<String> GOALS = Arrays.stream(Goal.values())
 			.map(g -> g.name().toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
 	public static final String BACKEND_VULKAN_FLAG = "backend-vulkan";
-	public static final Set<String> FLAGS = Set.of(BACKEND_VULKAN_FLAG, "shaders-enabled");
+	// 0.5.2 (#37): the instance's launcher keeps its own record of the mods (ModFilesPolicy.LAUNCHER, RealController.rebuild).
+	public static final String LAUNCHER_MODS_FLAG = "launcher-mods";
+	public static final Set<String> FLAGS = Set.of(BACKEND_VULKAN_FLAG, "shaders-enabled", LAUNCHER_MODS_FLAG);
 	public static final String SODIUM_WORKAROUND_FLAG = "sodium-workaround:";
 	// The gcCollector vocabulary (docs/v0.4/SPEC.md 5): GcKind's families.
 	public static final Set<String> GC_COLLECTORS = Set.of("g1", "zgc", "shenandoah", "parallel", "serial");

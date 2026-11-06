@@ -33,6 +33,8 @@ class LegacyRulesParseTest {
 
 	// docs/v0.5/SPEC.md "Compatibility promise" (0.2.x/0.3.x), AC5.2: the main-list advice the release revision R adds over r16.
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of(OldClientWarningTest.ID);
+	// 0.5.2 (#37): a setting entry older clients read but never fire (its launcher-mods flag is UNKNOWN to them).
+	static final List<String> SETTINGS_ADDED_SINCE_R16 = List.of("dh.client.advanced.autoUpdater.enableAutoUpdater");
 	// #24: the GPU rows added since r16 (0.2.0-0.4.0 read them like any other row; rules-v1 leaves them out).
 	static final List<String> GPU_TIERS_ADDED_SINCE_R16 = List.of("(?i)Arc(?:\\s*\\(TM\\))?\\s*\\d{3}T\\b");
 	static final String R16 = "/rules/r16/rules-v2.json";
@@ -54,7 +56,7 @@ class LegacyRulesParseTest {
 		assertEquals(List.of("max_fps", "balanced", "quality", "battery", "recording"),
 				rules.profileTemplates.templates.stream().map(t -> t.id).toList());
 		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading",
-				"stutter-chunks-loading-tag"), rules.stutterAdvice.stream().map(a -> a.id).toList());
+				"stutter-chunks-loading-tag", "stutter-chunks-loading-tag-sodium"), rules.stutterAdvice.stream().map(a -> a.id).toList());
 		rules.stutterAdvice.forEach(a -> assertEquals(List.of("stutter-doctor"), a.requires, a.id));
 	}
 
@@ -96,7 +98,9 @@ class LegacyRulesParseTest {
 	void legacyParserReadsRWithR16sCountsPlusTheAdditions() throws IOException {
 		var r = legacy(bundledJson());
 		var r16 = legacy(resource(R16));
-		assertEquals(r16.settings.stream().map(s -> s.key).toList(), r.settings.stream().map(s -> s.key).toList());
+		assertEquals(r16.settings.stream().map(s -> s.key).toList(),
+				r.settings.stream().map(s -> s.key).filter(k -> !SETTINGS_ADDED_SINCE_R16.contains(k)).toList());
+		assertEquals(r16.settings.size() + SETTINGS_ADDED_SINCE_R16.size(), r.settings.size());
 		List<String> advice = new java.util.ArrayList<>(r16.advice.stream().map(a -> a.id).toList());
 		advice.addAll(ADVICE_ADDED_SINCE_R16);
 		assertEquals(advice, r.advice.stream().map(a -> a.id).toList());

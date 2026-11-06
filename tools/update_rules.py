@@ -142,19 +142,23 @@ V1_VOCABULARIES = {
     "goal": frozenset({"performance", "balanced", "quality"}),
     "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
 }
+# launcher-mods (0.5.2, issue #37): the instance's launcher keeps its own record of the mods (ModFilesPolicy LAUNCHER).
+# Clients before 0.5.2 don't know it, so a condition testing it is UNKNOWN there and the rule doesn't fire.
+LAUNCHER_MODS_FLAG = "launcher-mods"
 V2_VOCABULARIES = {
     "gpuVendor": frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"}),
     "backend": frozenset({"opengl", "vulkan"}),
     "os": ("windows", "macos", "linux"),
     "goal": frozenset({"performance", "balanced", "quality"}),
-    "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+    "flags": frozenset({"backend-vulkan", "shaders-enabled", LAUNCHER_MODS_FLAG}),
     # v0.4, not in ConditionEvaluator.FLAGS: the jvm- facts (WS-J evaluates them separately) and the Stutter Doctor's
     # collector names (stutterAdvice only).
     "jvmFlags": JVM_FLAGS,
     "gcCollector": frozenset({"g1", "zgc", "shenandoah", "parallel", "serial"}),
 }
 # 0.2.0/0.3.0's vocabularies (ConditionEvaluator, byte-identical in both; SchemaConsistencyTest checks the pinned copy).
-LEGACY_V2_VOCABULARIES = {k: v for k, v in V2_VOCABULARIES.items() if k not in ("jvmFlags", "gcCollector")}
+LEGACY_V2_VOCABULARIES = {k: v - {LAUNCHER_MODS_FLAG} if k == "flags" else v
+                          for k, v in V2_VOCABULARIES.items() if k not in ("jvmFlags", "gcCollector")}
 SODIUM_WORKAROUND_FLAG = "sodium-workaround:"
 KNOWLEDGE_TOP_LEVEL = frozenset({
     "minModVersion", "gpuTiers", "gpuVendorFallback", "cpuTiers", "heapTiers", "mods", "obsolete", "settings", "advice",

@@ -1,6 +1,11 @@
 package io.github.chaotix345.rigtune.core.launcher;
 
+import io.github.chaotix345.rigtune.core.model.HardwareProfile;
+import io.github.chaotix345.rigtune.core.rules.ConditionEvaluator;
 import org.jspecify.annotations.Nullable;
+
+import java.util.Set;
+import java.util.TreeSet;
 
 // docs/v0.5/SPEC.md 4a: who changes this instance's mod files. RIGTUNE: RigTune, as in 0.4. LAUNCHER: the launcher keeps
 // its own record of the mods, so mod-file changes become advice with its steps. PENDING: launcher detection hasn't
@@ -43,5 +48,19 @@ public enum ModFilesPolicy {
 	// Mod-file changes are advice (LAUNCHER, and PENDING treated as LAUNCHER).
 	public boolean launcherManages() {
 		return this != RIGTUNE;
+	}
+
+	// 0.5.2 (#37): hw with the rules' launcher-mods flag under LAUNCHER only (PENDING may still turn out RIGTUNE, and a
+	// setting rule shouldn't act on a guess; its late answer rebuilds the report).
+	public HardwareProfile flagged(HardwareProfile hw) {
+		if (this != LAUNCHER || hw == null) {
+			return hw;
+		}
+		Set<String> flags = new TreeSet<>(hw.flags() == null ? Set.of() : hw.flags());
+		if (!flags.add(ConditionEvaluator.LAUNCHER_MODS_FLAG)) {
+			return hw;
+		}
+		return new HardwareProfile(hw.cpu(), hw.gpu(), hw.totalRamMb(), hw.maxHeapMb(), hw.display(), hw.hasBattery(), hw.onBattery(),
+				hw.osName(), hw.mcVersion(), Set.copyOf(flags));
 	}
 }
