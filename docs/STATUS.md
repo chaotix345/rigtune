@@ -10,9 +10,9 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## Where it stands
 - Released: **0.5.1** (29 Sep) for MC 26.2 and 26.3, on GitHub; Modrinth versions 0.5.1+mc26.2 (5Zq8LVfK) and +mc26.3 (FqlSEw70) uploaded. **The Modrinth project is still "Under review"**: Charlie's dashboard (6 Nov) says it is in the moderation queue, with no moderator message ("we aim to review within a week, but some projects may face delays"). The public API returns 404 until it's approved. Submitted around 25 Sep.
-- Rules: **r20 live on main** (6 Nov, PR #50; raw rules-v1.json and rules-v2.json both return revision 20). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 (merged) makes it push the branch and leave the PR to HQ. Known problem in the live rules: Krypton is offered alongside e4mc (Fabulously Optimized and Additive ship it), which breaks joining singleplayer worlds; the fix (r21) is PR #55, in review.
-- CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (PR #56 fixes it). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
-- Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). The purge of the old 8,859 (~138 GB) is running.
+- Rules: **r21 live on main** (6 Nov, PR #55; raw rules-v1.json and rules-v2.json both return revision 21). r21: Krypton conflicts with e4mc (its 0.3.x jars break joining singleplayer worlds with e4mc, which Fabulously Optimized and Additive ship); the unsupported Krypton vs Fast Noise / Material Rule Compiler conflict is gone from v2 (0.1.x keeps it via v1 overrides). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 makes it push the branch and leave the PR to HQ.
+- CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
+- Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). Purge done 6 Nov: 253 left (4 release-files from Sep, 249 expiring within 7 days), from 8,863 (~138 GB).
 - Open issues: 15 (#35-#49). #33 fixed by PR #53. No open security alerts.
 - Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
 
@@ -51,7 +51,6 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
 
 ## Dated reminders
-- 2026-11-07: finish the artifact purge (started 6 Nov; it will stop at the 2-hour background limit with ~6,000 of 8,859 done). Check `gh api repos/chaotix345/rigtune/actions/artifacts --jq .total_count`; delete what's left that is older than 7 days and not `release-files`: `gh api --paginate repos/chaotix345/rigtune/actions/artifacts --jq '.artifacts[]|select(.name!="release-files" and (.created_at < "<today-7d>"))|.id' | while read id; do gh api -X DELETE repos/chaotix345/rigtune/actions/artifacts/$id; done` (stay under 5,000 API calls an hour).
 - 2026-11-09: first rules bot run under HQ (Mon 14:00); the weekly review opens its PR (docs/hq.md "Rules updates"). With PR #52 merged, the bot run should succeed with a "HQ opens the PR" notice.
 - 2026-11-11: snapshot canary (Wed 05:00 UTC, 16:00 Sydney): it must build the newest 26.4 snapshot, not skip, once the canary fix is merged.
 - 2026-11-13: billing check: November's `rigtune`/`nemesis-mod` storage stopped growing after the purge.
@@ -64,11 +63,9 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:4e7a726b427f49de14f11976135183130f1d077297e28cf69a227334899bb912> | fix/snapshot-canary-49 | tools/add_mc_version.py, tools/MC_VERSIONS.md, canary tests, docs/research/v0.6/ | PR #56 reviewed, auto-merge queued |
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:d392cdcae50606b32dee4893cc363c1631763980c0c5f659d6eca8d865a43d61> | fix/0.5.2-ui-wording | src/ UI screens, en_us.json (#35 #36 #38 #39 #43 #47) | running |
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:b7c20f9590d123c0a74874b6a8ff3be4c8ec112497022bf57f70716e36af820c> | fix/rules-krypton-conflicts | rules/, rules scenario tests | PR #55 (r21), fresh review running |
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:d392cdcae50606b32dee4893cc363c1631763980c0c5f659d6eca8d865a43d61> | fix/0.5.2-ui-wording | src/ UI screens, en_us.json (#35 #36 #38 #39 #43 #47) | PR #58: CI game tests fail (header split shrinks the list at 640x480, FirstApplyGameTest AC8.18) + fresh review "fix first"; both sent back, worker fixing |
 
-Next worker after the UI batch merges: the 0.5.2 logic batch (#37, #40, #41, #42, #44, #45, #46, #48; it also touches en_us.json and rules/source/knowledge.json).
+Next worker after PR #58 merges: the 0.5.2 logic batch (#37, #40, #41, #42, #44, #45, #46, #48, and #47 item 3 in knowledge.json; it also touches en_us.json and rules/source/knowledge.json). Fold in PR #55's review nits (the Additive scenario on 26.3, an assertTrue before the e4mc warning lookup, a DownloadPlanner test for Krypton + Fast Noise, a pointer in docs/research/knowledge.md to r21) and keep #43's new "Let it finish generating first" advice consistent with #40.
 
 ## Housekeeping
 - 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). Kept, because they hold commits that aren't on main: remote and local `fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, local `local/v05-battery`. The weekly review checks each against main (`git cherry`, `git diff origin/main...<b>`) before deleting.
@@ -77,6 +74,7 @@ Next worker after the UI batch merges: the 0.5.2 logic batch (#37, #40, #41, #42
 - This PC ran short of memory on 6 Nov with four workers building (two Gradle runs died with out-of-memory errors and passed on retry): keep at most two Gradle-building workers at once.
 
 ## Recent changes
+- 2026-11-06 PRs #55, #56, #57: rules r21 live (Krypton/e4mc; stale Fast Noise conflict); the canary's add_mc_version fix and the 26.4 survey (docs/research/v0.6/mc-26.4.md: ~12 agent-hours); STATUS update. Artifact purge finished.
 - 2026-11-06 PRs #52, #53, #54: artifact retention + the rules bot leaves the PR to HQ; #33 stutter evaluator fixed; STATUS/hq.md update. Charlie answered the setup questions (Goals, Approved by Charlie).
 - 2026-11-06 PR #51: RigTune HQ set up (STATUS.md, docs/hq.md, CLAUDE.md, release guard hook, attribution off); PROGRESS.md marked as history.
 - 2026-11-06 PR #50: rules r20 live (Krypton and Particle Core on 26.3, FO/Additive lists). HQ fixed a scenario test that pinned "Krypton has no 26.3 build". All five `bot/rules-update-*` branches deleted. Artifact purge started.
