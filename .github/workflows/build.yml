@@ -146,6 +146,7 @@ jobs:
           name: rigtune-jars
           path: versions/*/build/libs/*.jar
           if-no-files-found: ignore
+          retention-days: 7
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -155,6 +156,7 @@ jobs:
             versions/*/build/reports/tests/**
             versions/*/build/test-results/**
           if-no-files-found: ignore
+          retention-days: 7
 
   # The self-update E2E on this run's jars (docs/v0.5/SPEC.md 3a; .github/workflows/e2e.yml): the push tier, 0.4.0 → new
   # on every node, on every push. A pull request into main from a feat/v* branch (the release PR) runs the release tier.
@@ -313,6 +315,7 @@ jobs:
           name: gametest-screenshots-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/screenshots/
           if-no-files-found: ignore
+          retention-days: 7
       - name: Upload logs and crash reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -325,6 +328,7 @@ jobs:
             versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl
             versions/${{ matrix.mc }}/build/gametest-modrinth/fake-modrinth.out
           if-no-files-found: ignore
+          retention-days: 7
       # The footprint guard's numbers (docs/v0.4/SPEC.md 10): FootprintGameTest's footprint-<mc>-<backend>.json.
       - name: Upload footprint numbers
         if: always()
@@ -333,6 +337,7 @@ jobs:
           name: footprint-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
           if-no-files-found: ignore
+          retention-days: 7
       # review-11 PERF-3: a returning player's startup, in the part that runs FootprintGameTest, after that part's uploads
       # (it starts a fresh run folder): one more JVM with only FootprintGameTest and a seeded config/rigtune
       # (tools/gametest/returning_seed.py: 0.4's and 0.5's written files, 50+ history entries, nothing staged). Its render-thread
@@ -364,6 +369,7 @@ jobs:
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
           if-no-files-found: ignore
+          retention-days: 7
 
   python:
     runs-on: ubuntu-24.04
