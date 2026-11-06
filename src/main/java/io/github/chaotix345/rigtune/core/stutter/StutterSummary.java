@@ -47,6 +47,9 @@ public final class StutterSummary {
 			out.append(" · ").append(r.collector());
 		}
 		out.append(", ").append(r.heapMaxMb()).append(" MB heap\n");
+		if (r.frames() <= 0) {
+			return out.append("No frames recorded yet\n").toString();
+		}
 		Double window = r.windowSeconds();
 		// v0.5 RW-17: the time the game throttled its frame rate isn't gameplay; say how much there was.
 		String idle = r.idleSeconds() == null ? "" : ", " + clock(r.idleSeconds()) + " idle (throttled) not counted";
@@ -91,7 +94,7 @@ public final class StutterSummary {
 			out.append("Phase timing unavailable\n");
 		}
 		if (r.facts().gcOffsetMs() == null) {
-			out.append("GC timing not calibrated yet\n");
+			out.append("Garbage collection can't be timed yet: Java hasn't collected garbage since recording started\n");
 		}
 		if (!advice.isEmpty()) {
 			out.append("Advice: ").append(String.join("; ", advice.stream().map(a -> MarkdownSafe.field(a.title())).toList())).append('\n');

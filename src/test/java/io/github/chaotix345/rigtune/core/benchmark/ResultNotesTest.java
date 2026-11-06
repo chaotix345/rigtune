@@ -9,6 +9,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 2B: the result screen's lines about how the run was measured, as truth tables over ResultNotes.
 class ResultNotesTest {
@@ -101,14 +102,23 @@ class ResultNotesTest {
 		BenchmarkRecord fresh = TrendFixtures.run("fresh").fresh().build();
 		BenchmarkRecord generating = TrendFixtures.run("dh").dhGenerating().build();
 		String world = "The first run generated the benchmark world's terrain, so these two runs can't be compared. Measure before again.";
-		String dh = "Distant Horizons was generating terrain during one of these runs, so they can't be compared. Measure before again.";
+		String dhAfter = "Distant Horizons was generating terrain during this run, so these runs can't be compared. Let it finish generating"
+				+ " first, then Measure before again.";
+		String dhBefore = "Distant Horizons was generating terrain during the before run, so these runs can't be compared. Let it finish"
+				+ " generating first, then Measure before again.";
+		String dhBoth = "Distant Horizons was generating terrain during both runs, so they can't be compared. Let it finish generating first,"
+				+ " then Measure before again.";
 		assertNull(ResultNotes.pairCaveat(plain, plain), "neither: the verdict as before");
 		assertNull(ResultNotes.pairCaveat(null, plain), "not a pair");
 		assertNull(ResultNotes.pairCaveat(plain, null));
 		assertEquals(world, english(ResultNotes.pairCaveat(fresh, plain)), "the before");
 		assertEquals(world, english(ResultNotes.pairCaveat(plain, fresh)), "the after");
-		assertEquals(dh, english(ResultNotes.pairCaveat(generating, plain)));
-		assertEquals(dh, english(ResultNotes.pairCaveat(plain, generating)));
+		assertEquals(dhBefore, english(ResultNotes.pairCaveat(generating, plain)));
+		assertEquals(dhAfter, english(ResultNotes.pairCaveat(plain, generating)));
+		assertEquals(dhBoth, english(ResultNotes.pairCaveat(generating, generating)), "#43: both runs named");
+		assertTrue(ResultNotes.dhCaveat(ResultNotes.pairCaveat(generating, generating)));
+		assertFalse(ResultNotes.dhCaveat(ResultNotes.pairCaveat(fresh, generating)));
+		assertFalse(ResultNotes.dhCaveat(null));
 		assertEquals(world, english(ResultNotes.pairCaveat(fresh, generating)), "the new world named first");
 		assertEquals("Before: 800 FPS average, 500 FPS 1% low", english(ResultNotes.before(plain)));
 	}

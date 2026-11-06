@@ -82,15 +82,31 @@ public final class ResultNotes {
 		if (before == null || after == null || !BenchmarkTrend.excluded(before) && !BenchmarkTrend.excluded(after)) {
 			return null;
 		}
-		return fresh(before) || fresh(after)
-				? Text.of("rigtune.benchmark.pair.caveat.world_fresh",
-						"The first run generated the benchmark world's terrain, so these two runs can't be compared. Measure before again.")
-				: Text.of("rigtune.benchmark.pair.caveat.dh_generating",
-						"Distant Horizons was generating terrain during one of these runs, so they can't be compared. Measure before again.");
+		if (fresh(before) || fresh(after)) {
+			return Text.of("rigtune.benchmark.pair.caveat.world_fresh",
+					"The first run generated the benchmark world's terrain, so these two runs can't be compared. Measure before again.");
+		}
+		if (generating(before) && generating(after)) {
+			return Text.of("rigtune.benchmark.pair.caveat.dh_generating.both", "Distant Horizons was generating terrain during both runs, so they"
+					+ " can't be compared. Let it finish generating first, then Measure before again.");
+		}
+		return generating(before)
+				? Text.of("rigtune.benchmark.pair.caveat.dh_generating.before", "Distant Horizons was generating terrain during the before run, so"
+						+ " these runs can't be compared. Let it finish generating first, then Measure before again.")
+				: Text.of("rigtune.benchmark.pair.caveat.dh_generating", "Distant Horizons was generating terrain during this run, so these runs"
+						+ " can't be compared. Let it finish generating first, then Measure before again.");
+	}
+
+	public static boolean dhCaveat(@Nullable Text caveat) {
+		return caveat instanceof Text.Translatable t && t.key().startsWith("rigtune.benchmark.pair.caveat.dh_generating");
 	}
 
 	private static boolean fresh(BenchmarkRecord run) {
 		return run.context() != null && Boolean.TRUE.equals(run.context().worldFresh());
+	}
+
+	private static boolean generating(BenchmarkRecord run) {
+		return run.context() != null && Boolean.TRUE.equals(run.context().dhGenerating());
 	}
 
 	// The "before" run's numbers, shown with the caveat (the "after" run's are the headline).

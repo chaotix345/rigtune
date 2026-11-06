@@ -140,11 +140,13 @@ public final class LauncherRepair {
 		List<Text> parts = new ArrayList<>();
 		parts.add(Text.of("rigtune.repair.why", "An older RigTune changed these mods without the launcher, so its list of mods is out of date."));
 		switch (launcher) {
-			case MODRINTH_APP -> parts.add(Text.of("rigtune.repair.steps.modrinth_app", "With the game closed, for each old copy (%s), start in the"
-					+ " Modrinth App: open this instance → Content. If it's listed there, switched off (filter State → Disabled), delete it;"
-					+ " RigTune's newer version stays. If it isn't listed, it still blocks Update all: delete RigTune's newer copy of that mod in"
-					+ " Content, rename the old copy from .jar.disabled to .jar in the instance's mods folder, press Refresh in Content, then"
-					+ " Update it.", old));
+			case MODRINTH_APP -> parts.add(Text.of("rigtune.repair.steps.modrinth_app", "With the game closed, start in the Modrinth App: open"
+					+ " this instance → Content and look for each old copy by its file name: %s. Content may also list that mod's newer version:"
+					+ " that's RigTune's newer copy, not the old one. If the old copy is listed there, switched off (filter State → Disabled), delete"
+					+ " it; RigTune's newer copy stays. If it isn't listed, it still blocks Update all: delete RigTune's newer copy in Content,"
+					+ " rename the old copy from .jar.disabled to .jar in the instance's mods folder, press Refresh in Content, then Update it.",
+					Text.join("; ", findings.pairs().stream().map(p -> Text.of("rigtune.repair.pair.modrinth_app", "%s (RigTune's newer copy: %s)",
+							LogSafe.text(p.oldFile()), LogSafe.text(p.newFile()))).toList())));
 			case PRISM -> parts.add(Text.of("rigtune.repair.steps.prism", "In Prism Launcher: Edit... → Mods → select the old disabled copy → Remove,"
 					+ " before any Check for Updates: %s. RigTune's newer versions stay.", old));
 			case GDLAUNCHER -> parts.add(Text.of("rigtune.repair.steps.gdlauncher", "In GDLauncher: Mods → the old disabled copy → Delete: %s. RigTune's"

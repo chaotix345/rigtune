@@ -19,6 +19,7 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
@@ -72,13 +73,13 @@ public class RigTuneSettingsScreen extends Screen {
 					settings.networkEnabled = v;
 					networkChanged();
 				}));
-		remoteRules = rows.add(CycleButton.onOffBuilder(settings.remoteRules)
+		remoteRules = rows.add(CycleButton.builder(this::networkSwitchLabel, settings.remoteRules).withValues(true, false)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.remote_rules.tooltip")))
 				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.remote_rules"), (b, v) -> {
 					settings.remoteRules = v;
 					networkChanged();
 				}));
-		modrinth = rows.add(CycleButton.onOffBuilder(settings.modrinth)
+		modrinth = rows.add(CycleButton.builder(this::networkSwitchLabel, settings.modrinth).withValues(true, false)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.modrinth.tooltip")))
 				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.modrinth"), (b, v) -> {
 					settings.modrinth = v;
@@ -219,10 +220,20 @@ public class RigTuneSettingsScreen extends Screen {
 	private void updateActive() {
 		if (remoteRules != null) {
 			remoteRules.active = settings.networkEnabled;
+			remoteRules.setValue(remoteRules.getValue());
 		}
 		if (modrinth != null) {
 			modrinth.active = settings.networkEnabled;
+			modrinth.setValue(modrinth.getValue());
 		}
+	}
+
+	private Component networkSwitchLabel(boolean on) {
+		return switchLabel(on, settings.networkEnabled);
+	}
+
+	static Component switchLabel(boolean on, boolean network) {
+		return !on ? CommonComponents.OPTION_OFF : network ? CommonComponents.OPTION_ON : Component.translatable("rigtune.settings.on_network_off");
 	}
 
 	/** v0.5 (WS-L1 milestone 1): the rows (for the game tests' layout checks). */

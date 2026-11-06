@@ -615,17 +615,17 @@ public class TryItGameTest implements FabricClientGameTest {
 		pressByKey(context, "rigtune.tryit.button");
 		context.waitForScreen(TryItScreen.class);
 		context.waitTicks(2);
-		check(rowStartsWith(context, "Try It measures better once the world has settled. Play for about a minute first ("),
+		check(rowStartsWith(context, "Try it measures better once the world has settled. Play for about a minute first ("),
 				"the status line: " + context.computeOnClient(mc -> ((TryItScreen) mc.gui.screen()).rowText()));
 		check(!context.computeOnClient(mc -> ((TryItScreen) mc.gui.screen()).footer().getFirst().active), "Start is inactive");
 		Component answer = context.computeOnClient(mc -> real.startTryIt(rec, BenchmarkRequest.Scene.CURRENT));
-		check(answer.getString().startsWith("Try It measures better"), "a Start anyway is refused: " + answer.getString());
+		check(answer.getString().startsWith("Try it measures better"), "a Start anyway is refused: " + answer.getString());
 		context.waitTicks(5);
 		check(real.tryIt().tryIt() == null && TryItStore.shared(configDir()).current() == null, "no try opened");
 		context.takeScreenshot("tryit-intro-settling");
 		TryItService.settleSeconds(0);
 		context.waitFor(mc -> mc.gui.screen() instanceof TryItScreen screen && screen.footer().getFirst().active, 60);
-		check(!rowStartsWith(context, "Try It measures better"), "the status line goes once settled");
+		check(!rowStartsWith(context, "Try it measures better"), "the status line goes once settled");
 		context.runOnClient(mc -> mc.gui.setScreen(null));
 	}
 

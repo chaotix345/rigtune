@@ -1,6 +1,8 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.StutterAdvisor;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 // The Stutter Doctor's count lines at the text the screen shows (RigTune's en_us.json): singular and plural (review-8
 // P5B-F3) and the chunk-loading tag (P5A-F2).
@@ -74,8 +77,8 @@ class StutterScreenTextTest {
 		causes.put(Attributor.UNKNOWN, 0.23);
 		List<String> rows = StutterScreen.causeRows(report(new StutterReport.Spikes(126, 3, 3, 0), 104, Map.of(), causes)).stream().map(Component::getString)
 				.toList();
-		assertEquals(List.of("Garbage collection 59 %", "Game ticks 18 %", "Not explained 23 %"), rows);
-		assertEquals(List.of("Garbage collection 44 %", "Chunk loading 12 %", "Not explained 44 %"), StutterScreen.causeRows(report(new StutterReport.Spikes(9, 2,
+		assertEquals(List.of("Garbage collection 59%", "Game ticks 18%", "Not explained 23%"), rows);
+		assertEquals(List.of("Garbage collection 44%", "Chunk loading 12%", "Not explained 44%"), StutterScreen.causeRows(report(new StutterReport.Spikes(9, 2,
 				1, 0), 9, Map.of(), Map.of(Attributor.GC, 0.44, Attributor.CHUNK_LOAD, 0.12, Attributor.UNKNOWN, 0.44))).stream().map(Component::getString).toList(),
 				"shares that add up are shown as they are");
 	}
@@ -106,10 +109,47 @@ class StutterScreenTextTest {
 	}
 
 	@Test
+	void issue47PercentagesStayWholeAndNeverReadZero() {
+		assertEquals("100%", StutterScreen.percent(1.0));
+		assertEquals("<1%", StutterScreen.percent(0.002), "a non-zero share isn't 0%");
+		assertEquals("0%", StutterScreen.percent(0));
+		assertEquals("12%", StutterScreen.percent(0.124));
+	}
+
+	static StutterReport withFacts(StutterReport r, StutterReport.Facts facts) {
+		return new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(), r.frames(), r.avgFps(),
+				r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), facts, r.advice(),
+				r.enoughData(), r.phaseTiming(), r.hitches());
+	}
+
+	@Test
+	void issue47ShortGcPausesSayMoreMemoryWouldntHelp() {
+		StutterReport gc = report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.75, Attributor.UNKNOWN, 0.25));
+		String line = "These garbage collections were normal short pauses (no full collections, stalls or nearly full memory); more memory wouldn't remove"
+				+ " them.";
+		assertEquals(line, StutterScreen.gcShortLine(gc, List.of()).getString());
+		assertNull(StutterScreen.gcShortLine(gc, List.of(new StutterAdvisor.Fired("ram-stutter-gc-heap", "warning", Impact.HIGH, "t", "x"))), "GC advice fired");
+		assertEquals(line, StutterScreen.gcShortLine(gc, List.of(new StutterAdvisor.Fired("stutter-sodium-defer", "info", Impact.LOW, "t", "x"))).getString(),
+				"other advice");
+		assertNull(StutterScreen.gcShortLine(withFacts(gc, new StutterReport.Facts(null, 1, 0, 0, null)), List.of()), "a full pause");
+		assertNull(StutterScreen.gcShortLine(withFacts(gc, new StutterReport.Facts(null, 0, 1, 0, null)), List.of()), "a stall");
+		assertNull(StutterScreen.gcShortLine(withFacts(gc, new StutterReport.Facts(null, 0, 0, 2, null)), List.of()), "explicit GCs");
+		assertNull(StutterScreen.gcShortLine(withFacts(gc, new StutterReport.Facts(80, 0, 0, 0, null)), List.of()), "nearly full memory");
+		assertNull(StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.2, Attributor.UNKNOWN, 0.8)),
+				List.of()), "under 30%, and not the top cause");
+		assertNull(StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.4, Attributor.CHUNK_LOAD, 0.45,
+				Attributor.UNKNOWN, 0.15)), List.of()), "over 30% but not the top cause");
+		assertEquals(line, StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.45,
+				Attributor.CHUNK_LOAD, 0.45, Attributor.UNKNOWN, 0.1)), List.of()).getString(), "a tie for the top counts");
+		assertNull(StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.25, Attributor.UNKNOWN, 0.05)),
+				List.of()), "under 30%");
+	}
+
+	@Test
 	void theBenchmarkLineCountsOneSpike() {
 		assertEquals("Stutter Doctor: 1 spike during the sweeps; no cause measured",
 				StutterScreen.benchmarkLine(report(new StutterReport.Spikes(1, 0, 0, 0), 1, Map.of(), Map.of(Attributor.UNKNOWN, 1.0))).getString());
-		assertEquals("Stutter Doctor: 1 spike during the sweeps; likely causes: Garbage collection 60 %",
+		assertEquals("Stutter Doctor: 1 spike during the sweeps; likely causes: Garbage collection 60%",
 				StutterScreen.benchmarkLine(report(new StutterReport.Spikes(1, 0, 0, 0), 1, Map.of(), Map.of(Attributor.GC, 0.6, Attributor.UNKNOWN, 0.4))).getString());
 		assertEquals("Stutter Doctor: 3 spikes during the sweeps; no cause measured",
 				StutterScreen.benchmarkLine(report(new StutterReport.Spikes(3, 0, 0, 0), 2, Map.of(), Map.of(Attributor.UNKNOWN, 1.0))).getString());

@@ -304,7 +304,7 @@ public final class TryItText {
 	// The cold-start rule (docs/v0.5/SPEC.md 6, the coordinator's amendment): Start and Measure now in the player's own
 	// world wait until it has settled.
 	public static Text settleRefusal(int secondsLeft) {
-		return Text.of("rigtune.tryit.settle.refused", "Try It measures better once the world has settled. Play for about a minute first (%s s left).",
+		return Text.of("rigtune.tryit.settle.refused", "Try it measures better once the world has settled. Play for about a minute first (%s s left).",
 				secondsLeft);
 	}
 

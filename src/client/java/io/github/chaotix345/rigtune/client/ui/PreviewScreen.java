@@ -321,6 +321,9 @@ public class PreviewScreen extends Screen {
 	// P0.4 (docs/v0.5/SPEC.md 4b, WS-L1): "Mod changes to make in <launcher>: N (listed on the main screen)": the report's
 	// mod-file rows the launcher took over (none of them is in this preview, which lists what Apply does).
 	private void launcherLines(PreviewList target, ApplyPreview shown, int width) {
+		if (confirm != null) {
+			return;
+		}
 		Report report = controller.report();
 		int count = report == null ? 0 : (int) report.recommendations().stream().filter(LauncherModAdvice::advised).count();
 		Text line = LauncherModText.previewLine(controller.modFiles(), controller.launcher(), count);

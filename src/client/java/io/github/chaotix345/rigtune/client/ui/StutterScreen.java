@@ -359,7 +359,7 @@ public class StutterScreen extends Screen {
 		}
 		// v0.5 RW-10: no 0 % row, and the whole percentages never total more than 100 (StutterSummary.percentages).
 		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> bar(l, Component.translatable(CAUSES.get(cause)), percent / 100.0,
-				cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent + " %")));
+				cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent + "%")));
 		for (String tag : Attributor.TAGS) {
 			Integer n = r.tags().get(tag);
 			if (n != null && n > 0 && TAGS.containsKey(tag)) {
@@ -371,7 +371,7 @@ public class StutterScreen extends Screen {
 	// The cause rows' text as shown ("Garbage collection 59 %"), for the tests.
 	static List<Component> causeRows(StutterReport r) {
 		List<Component> out = new ArrayList<>();
-		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> out.add(Component.translatable(CAUSES.get(cause)).append(" " + percent + " %")));
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> out.add(Component.translatable(CAUSES.get(cause)).append(" " + percent + "%")));
 		return out;
 	}
 
@@ -426,8 +426,12 @@ public class StutterScreen extends Screen {
 		if (!r.settingChanges().isEmpty()) {
 			text(l, Component.translatable(view.live() ? "rigtune.stutter.settings.advice.live" : "rigtune.stutter.settings.advice"), COLOR_LABEL, width, 0);
 		}
+		Component gcShort = gcShortLine(r, advice);
 		if (advice.isEmpty()) {
 			text(l, Component.translatable("rigtune.stutter.advice.none"), COLOR_LABEL, width, 0);
+			if (gcShort != null) {
+				text(l, gcShort, COLOR_LABEL, width, 0);
+			}
 			return;
 		}
 		LauncherInfo launcher = controller.launcher();
@@ -449,6 +453,19 @@ public class StutterScreen extends Screen {
 				fixRows(l, f, fix, width);
 			}
 		}
+		if (gcShort != null) {
+			text(l, gcShort, COLOR_LABEL, width, ROW_GAP);
+		}
+	}
+
+	static @Nullable Component gcShortLine(StutterReport r, List<StutterAdvisor.Fired> advice) {
+		Map<String, Integer> shown = StutterSummary.percentages(r.causes());
+		int gc = shown.getOrDefault(Attributor.GC, 0);
+		StutterReport.Facts facts = r.facts();
+		boolean top = shown.values().stream().allMatch(p -> p <= gc);
+		boolean shortOnly = facts.fullGcs() == 0 && facts.stalls() == 0 && facts.explicitGcs() == 0 && (facts.liveSetPct() == null || facts.liveSetPct() < 75);
+		return r.enoughData() && gc >= 30 && top && shortOnly && advice.stream().noneMatch(f -> f.id().contains("-" + Attributor.GC))
+				? Component.translatable("rigtune.stutter.advice.gc_short") : null;
 	}
 
 	// docs/v0.5/SPEC.md 5 (C20): under an advice, its one-click fix ("Try it in one click: ...", the two steps and when it
@@ -575,8 +592,9 @@ public class StutterScreen extends Screen {
 		return value >= 100 || value == Math.rint(value) ? String.format(Locale.ROOT, "%,d", Math.round(value)) : String.format(Locale.ROOT, "%.1f", value);
 	}
 
-	private static String percent(double share) {
-		return String.format(Locale.ROOT, "%d %%", Math.round(share * 100));
+	static String percent(double share) {
+		long rounded = Math.round(share * 100);
+		return share > 0 && rounded == 0 ? "<1%" : rounded + "%";
 	}
 
 	private static String clock(double seconds) {
@@ -599,7 +617,7 @@ public class StutterScreen extends Screen {
 				if (any) {
 					causes.append(Component.literal(", "));
 				}
-				causes.append(Component.translatable(CAUSES.get(e.getKey()))).append(Component.literal(" " + e.getValue() + " %"));
+				causes.append(Component.translatable(CAUSES.get(e.getKey()))).append(Component.literal(" " + e.getValue() + "%"));
 				any = true;
 			}
 		}

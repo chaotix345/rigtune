@@ -98,6 +98,7 @@ public class BenchmarkResultScreen extends Screen {
 	// The trend's lines in `lines` (review M3: they give way before the table or chart does).
 	private int trendFrom;
 	private int trendTo;
+	private int pinned = -1;
 	private int contentTop;
 	private int contentBottom;
 
@@ -237,7 +238,7 @@ public class BenchmarkResultScreen extends Screen {
 			wrapped.add(split.isEmpty() ? List.of(FormattedCharSequence.EMPTY) : split);
 			counts[i] = wrapped.get(i).size();
 		}
-		int[] shown = fit(counts, maxRows, trendFrom, trendTo);
+		int[] shown = fit(counts, maxRows, trendFrom, trendTo, pinned);
 		List<StatusRow> out = new ArrayList<>();
 		List<Stop> lineStops = new ArrayList<>();
 		for (int i = 0; i < lines.size(); i++) {
@@ -268,6 +269,10 @@ public class BenchmarkResultScreen extends Screen {
 	// lines after its first give way first, from its end (review M3), then the line wrapped to the most rows folds back to
 	// one clipped row (the last such line first), until they fit or every line is one row; the table or chart keeps its room.
 	static int[] fit(int[] wrapped, int maxRows, int trendFrom, int trendTo) {
+		return fit(wrapped, maxRows, trendFrom, trendTo, -1);
+	}
+
+	static int[] fit(int[] wrapped, int maxRows, int trendFrom, int trendTo, int pinned) {
 		int[] shown = wrapped.clone();
 		int total = 0;
 		for (int n : shown) {
@@ -280,7 +285,7 @@ public class BenchmarkResultScreen extends Screen {
 		while (total > maxRows) {
 			int longest = -1;
 			for (int i = 0; i < shown.length; i++) {
-				if (shown[i] > 1 && (longest < 0 || shown[i] >= shown[longest])) {
+				if (i != pinned && shown[i] > 1 && (longest < 0 || shown[i] >= shown[longest])) {
 					longest = i;
 				}
 			}
@@ -314,7 +319,7 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Texts.component(noisy), COLOR_WARN));
 		}
 		Text generating = ResultNotes.dhGenerating(context);
-		if (generating != null) {
+		if (generating != null && !(outcome.gain() == null && ResultNotes.dhCaveat(ResultNotes.pairCaveat(outcome.before(), outcome.record())))) {
 			out.add(new Line(Texts.component(generating), COLOR_WARN));
 		}
 		Text dhOff = ResultNotes.dhOff(OptionalMods.dhLoaded(), outcome.session().original().dhRendering());
@@ -346,6 +351,7 @@ public class BenchmarkResultScreen extends Screen {
 		SessionResult session = outcome.session();
 		BenchmarkMath.Aggregate result = session.result();
 		List<Line> out = new ArrayList<>();
+		pinned = -1;
 		if (tune()) {
 			PlannerResult rd = outcome.result();
 			Component value = Component.literal(Integer.toString(session.chosen().renderDistance())).withStyle(ChatFormatting.BOLD);
@@ -389,6 +395,7 @@ public class BenchmarkResultScreen extends Screen {
 			if (before != null) {
 				out.add(new Line(Texts.component(before), COLOR_LABEL));
 			}
+			pinned = out.size();
 			out.add(new Line(Texts.component(ResultNotes.pairCaveat(outcome.before(), outcome.record())), COLOR_WARN));
 		} else if (outcome.record() != null && BenchmarkRecord.BEFORE.equals(outcome.record().phase())) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.saved_before"), COLOR_LABEL));
