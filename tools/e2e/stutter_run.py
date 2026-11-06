@@ -117,7 +117,10 @@ def evaluate(lines, stutter, gc_text):
     # tagged spike lies in its widest reading (tp - 1 .. tp + 11); no tagged spike lies outside that and the world entry's
     # own window. "Chunks loading": among the listed spikes from the tp on, every one from the first with chunk loads to the
     # last (the product tags a spike only when chunks loaded within Attributor.CHUNK_NEAR of it, so loading starts after the
-    # tp, P5C-F1, and may end: run 36431601035's 26.2 leg). The report lists only the MAX_WORST worst spikes: when the list
+    # tp, P5C-F1, and may end: run 36431601035's 26.2 leg). From the tp on means after the product's own tp: surely after it
+    # (tp + 1 on), or within the log's +-1 s tagged "after teleport". The world entry's loading still runs at the tp, and the
+    # tp's never-generated chunks come seconds later: an entry spike at tp - 0.6 s is neither the tp's loading nor the start
+    # of it (issue #33, release run 36530247606). The report lists only the MAX_WORST worst spikes: when the list
     # is full, a tag with no listed spike to show it is judged by the session's count exceeding the listed ones (release
     # run 36448687667: 31 spikes, 10 listed, none after the tp's first moment).
     def within(w, start, low, high):
@@ -135,7 +138,7 @@ def evaluate(lines, stutter, gc_text):
              and not within(w, entry_s, -1, TELEPORT_WINDOW + 1)]
     untagged = [w["t"] for w in sure if not tagged(w)]
     unlisted_tp = tags.get("afterTeleport", 0) - sum(1 for w in worst if tagged(w))
-    after = sorted((w for w in worst if tp_s is not None and w["t"] >= tp_s - 1), key=lambda w: w["t"])
+    after = sorted((w for w in worst if within(w, tp_s, 1, float("inf")) or (within(w, tp_s, -1, 1) and tagged(w))), key=lambda w: w["t"])
     loading = [w for w in after if loads(w)]
     first_loading = loading[0]["t"] if loading else None
     last_loading = loading[-1]["t"] if loading else None
