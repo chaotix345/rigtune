@@ -22,6 +22,9 @@ import java.util.OptionalInt;
 // switched off is skipped with its reason (skipFailed).
 public final class BenchmarkSession {
 	public static final double SD_MIN_IMPROVEMENT = 0.05;
+	// #41: a run's noise near the target (Try it's smallest floor, 5 %): the current render distance missing the target by
+	// no more than this is kept, never lowered (simulation distance already needs a clear gain to change).
+	public static final double RD_NOISE_FLOOR = 0.05;
 	public static final double SLACK_SECONDS = 10;
 	public static final int CURRENT_SCENE_HEADROOM = 8;
 	private static final int SD_STEP = 2;
@@ -307,7 +310,15 @@ public final class BenchmarkSession {
 		if (planner == null || planner.result().measurements().isEmpty()) {
 			return original.renderDistance();
 		}
-		return planner.result().suggestedRd();
+		PlannerResult result = planner.result();
+		int current = original.renderDistance();
+		return result.suggestedRd() < current && missedWithinNoise(result, current, targetFps) ? current : result.suggestedRd();
+	}
+
+	// #41: rd was measured on loaded terrain and missed the target by no more than RD_NOISE_FLOOR.
+	public static boolean missedWithinNoise(PlannerResult result, int rd, double targetFps) {
+		return result.measurements().stream().anyMatch(m -> m.rd() == rd && m.complete() && !m.passed()
+				&& m.stats().onePercentLowFps() >= targetFps * (1 - RD_NOISE_FLOOR) - 1e-9);
 	}
 
 	// The highest candidate that met the target; otherwise the best one if it beats the current value clearly

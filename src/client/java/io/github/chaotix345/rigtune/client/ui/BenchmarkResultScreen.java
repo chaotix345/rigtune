@@ -356,7 +356,9 @@ public class BenchmarkResultScreen extends Screen {
 			PlannerResult rd = outcome.result();
 			Component value = Component.literal(Integer.toString(session.chosen().renderDistance())).withStyle(ChatFormatting.BOLD);
 			Text nothing = ResultNotes.nothingMeasured(rows, outcome.originalRd());
+			Text kept = ResultNotes.keptWithinNoise(session);
 			out.add(nothing != null ? new Line(Texts.component(nothing), COLOR_WARN)
+					: kept != null ? new Line(Texts.component(kept), COLOR_PASS)
 					: new Line(Component.translatable(rd.targetMet() ? "rigtune.benchmark.met" : "rigtune.benchmark.missed", value),
 							rd.targetMet() ? COLOR_PASS : COLOR_WARN));
 		} else if (result != null) {

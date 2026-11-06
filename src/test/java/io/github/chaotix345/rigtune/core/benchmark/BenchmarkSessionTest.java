@@ -92,6 +92,36 @@ class BenchmarkSessionTest {
 				.allMatch(s -> s.protocol().equals(Timing.DEFAULT.full()) && s.knobs().simulationDistance() == 12));
 	}
 
+	// #41: the field run (target 170): the current 12 missed by 3 % (165), 11 passed at 170.5. That's inside the noise, so
+	// Tune keeps 12 and says why; a clear miss still lowers it.
+	@Test
+	void aMissWithinTheNoiseKeepsTheCurrentRenderDistance() {
+		FakeRig rig = new FakeRig();
+		BenchmarkSession session = tune(new Knobs(12, 12, true, false), new TuneLimits(4, 32, 170, false, 5));
+		rig.drive(session, step -> low(switch (step.knobs().renderDistance()) {
+			case 12 -> 165;
+			case 11 -> 170.5;
+			default -> 180;
+		}));
+		SessionResult result = session.result();
+		assertEquals(11, result.renderDistance().suggestedRd());
+		assertEquals(12, result.chosen().renderDistance());
+		assertEquals("Render distance 12 missed the target by less than 5% (1% lows 165 FPS), which is within a run's noise, so RigTune doesn't "
+				+ "suggest lowering it.", ResultNotes.keptWithinNoise(result).english());
+	}
+
+	@Test
+	void aClearMissStillLowersTheRenderDistance() {
+		FakeRig rig = new FakeRig();
+		BenchmarkSession session = tune(new Knobs(12, 12, true, false), new TuneLimits(4, 32, 170, false, 5));
+		rig.drive(session, step -> low(step.knobs().renderDistance() >= 12 ? 160 : 180));
+		SessionResult result = session.result();
+		assertEquals(11, result.chosen().renderDistance());
+		assertNull(ResultNotes.keptWithinNoise(result));
+		assertFalse(BenchmarkSession.missedWithinNoise(result.renderDistance(), 12, 170));
+		assertTrue(BenchmarkSession.missedWithinNoise(result.renderDistance(), 12, 168));
+	}
+
 	@Test
 	void sdSkippedWhenNotTunable() {
 		FakeRig rig = new FakeRig();

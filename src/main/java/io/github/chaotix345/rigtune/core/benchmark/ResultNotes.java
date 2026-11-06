@@ -123,6 +123,21 @@ public final class ResultNotes {
 						"Nothing could be measured: the terrain hadn't loaded in time. Your render distance stays at %s.", originalRd);
 	}
 
+	// #41: Tune kept the current render distance, which missed the target only within the run's noise: the headline
+	// instead of "met" / "best 1% lows". Null otherwise.
+	public static @Nullable Text keptWithinNoise(SessionResult session) {
+		int rd = session.chosen().renderDistance();
+		PlannerResult result = session.renderDistance();
+		if (session.mode() != BenchmarkRequest.Mode.TUNE || rd != session.original().renderDistance() || result.suggestedRd() >= rd
+				|| !BenchmarkSession.missedWithinNoise(result, rd, session.targetFps())) {
+			return null;
+		}
+		long low = result.measurements().stream().filter(m -> m.rd() == rd).mapToLong(m -> Math.round(m.stats().onePercentLowFps())).findFirst().orElse(0);
+		return Text.of("rigtune.benchmark.within_noise",
+				"Render distance %s missed the target by less than 5%% (1%% lows %s FPS), which is within a run's noise, so RigTune doesn't suggest lowering it.",
+				rd, low);
+	}
+
 	// The table's last column.
 	public static String mark(PlannerResult.Measurement row) {
 		return row.passed() ? "✔" : row.complete() ? "✘" : "?";
