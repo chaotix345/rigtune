@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.rules.ConditionEvaluator;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
@@ -28,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // The v0.2 knowledge (SPEC items 9, 7 and AC2.3) over the bundled rules-v2.json.
@@ -394,6 +396,25 @@ class KnowledgeV2ScenarioTest {
 			assertEquals(!selfUpdating, recs.containsKey("update:distanthorizons"), on);
 			assertEquals(selfUpdating, recs.containsKey("advice:updates-itself:distanthorizons"), on);
 		}
+	}
+
+	// #37: in an instance whose launcher keeps the mod list (the launcher-mods flag, ModFilesPolicy.LAUNCHER), Distant
+	// Horizons' auto-updater replacing its own jar breaks the launcher's record, so RigTune suggests turning it off (a
+	// setting: one click, undone in History). Elsewhere, or with it already off, nothing changes.
+	@Test
+	void dhAutoUpdaterOffWhereTheLauncherKeepsTheMods() {
+		String autoUpdater = "dh.client.advanced.autoUpdater.enableAutoUpdater";
+		Map<String, String> on = with(DH_DEFAULTS, autoUpdater, "true");
+		Map<String, Recommendation> managed = run(withFlags(Fixtures.userRig(), ConditionEvaluator.LAUNCHER_MODS_FLAG), DH_MODS, on);
+		assertEquals("false", target(managed, autoUpdater));
+		Recommendation rec = managed.get("set:" + autoUpdater);
+		assertTrue(rec.selectedByDefault());
+		assertTrue(rec.reason().contains("update Distant Horizons in your launcher"), rec.reason());
+		assertEquals("Distant Horizons: Auto Updater: On → Off", rec.titleText().english());
+		assertNull(target(run(Fixtures.userRig(), DH_MODS, on), autoUpdater), "no launcher keeps the mods");
+		assertNull(target(run(withFlags(Fixtures.userRig(), ConditionEvaluator.LAUNCHER_MODS_FLAG), DH_MODS, with(DH_DEFAULTS, autoUpdater, "false")),
+				autoUpdater), "already off");
+		assertNull(target(run(withFlags(Fixtures.userRig(), ConditionEvaluator.LAUNCHER_MODS_FLAG), List.of("sodium"), on), autoUpdater), "no DH");
 	}
 
 	// Phase 5 finding 2: the vanilla render-distance clamps are about Distant Horizons drawing the far terrain.

@@ -429,6 +429,7 @@
 	"rigtune.tryit.refused.storage": "Results can't be saved right now; see the log.",
 	"rigtune.tryit.refused.unavailable": "Try it (measured) isn't available here.",
 	"rigtune.tryit.refused.unmeasurable": "Benchmarks always run with the frame rate uncapped, so this setting can't be measured.",
+	"rigtune.tryit.refused.not_performance": "This setting isn't about performance, so there's nothing to measure.",
 	"rigtune.tryit.refused.unsupported": "RigTune doesn't change this setting, so it can't be tried.",
 	"rigtune.tryit.scene.current": "Measured here, where you stand. The screen and controls are taken over while it measures; Esc stops it.",
 	"rigtune.tryit.scene.world": "Measured in the benchmark world: same spot, time and weather every time.",

@@ -50,6 +50,8 @@ public final class TryItText {
 			case KIND -> Text.of("rigtune.tryit.refused.kind", "Only settings can be tried; mod changes can't.");
 			case UNMEASURABLE -> Text.of("rigtune.tryit.refused.unmeasurable",
 					"Benchmarks always run with the frame rate uncapped, so this setting can't be measured.");
+			case NOT_PERFORMANCE -> Text.of("rigtune.tryit.refused.not_performance",
+					"This setting isn't about performance, so there's nothing to measure.");
 			case PRESET -> Text.of("rigtune.tryit.refused.preset", "This setting changes many others at once, so it can't be tried on its own.");
 			case UNSUPPORTED -> Text.of("rigtune.tryit.refused.unsupported", "RigTune doesn't change this setting, so it can't be tried.");
 			case NO_FILE -> Text.of("rigtune.tryit.refused.no_file", "This setting's config file wasn't found.");

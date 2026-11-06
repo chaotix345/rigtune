@@ -350,7 +350,7 @@ class LegacyKeySetTests(unittest.TestCase):
     def test_legacy_sets(self):
         self.assertEqual(ur.V2_CONDITION_KEYS - ur.LEGACY_V2_CONDITION_KEYS, {"driverVersion"})
         self.assertTrue(ur.V1_CONDITION_KEYS < ur.LEGACY_V2_CONDITION_KEYS)
-        self.assertEqual(ur.LEGACY_V2_VOCABULARIES["flags"], ur.V2_VOCABULARIES["flags"])
+        self.assertEqual(ur.LEGACY_V2_VOCABULARIES["flags"], ur.V2_VOCABULARIES["flags"] - {ur.LAUNCHER_MODS_FLAG})
         self.assertNotIn("jvmFlags", ur.LEGACY_V2_VOCABULARIES)
         self.assertFalse(ur.JVM_FLAGS & ur.V2_VOCABULARIES["flags"])
         self.assertNotIn(ur.JVM_PROBED_FLAG, ur.JVM_FLAGS)

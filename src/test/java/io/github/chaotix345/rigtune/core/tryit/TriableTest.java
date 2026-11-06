@@ -94,6 +94,7 @@ class TriableTest {
 		KEYS.put("dh.client.advanced.graphics.quality.horizontalQuality", restart());
 		KEYS.put("dh.client.advanced.graphics.quality.maxHorizontalResolution", restart());
 		KEYS.put("dh.common.multiThreading.numberOfThreads", restart());
+		KEYS.put("dh.client.advanced.autoUpdater.enableAutoUpdater", refused(Refusal.NOT_PERFORMANCE));
 		KEYS.put("dh.client.advanced.debugging.rendererMode", new Expect(Kind.RESTART, null, EnumSet.of(Difference.DISTANT_HORIZONS), false));
 		KEYS.put("iris.maxShadowRenderDistance", restart());
 		KEYS.put("iris.enableShaders", new Expect(Kind.RESTART, null, EnumSet.of(Difference.SHADERS, Difference.SHADER_PACK), false));

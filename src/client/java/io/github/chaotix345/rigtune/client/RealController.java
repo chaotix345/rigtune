@@ -372,7 +372,7 @@ public final class RealController implements RigTuneController {
 						Set<String> loaded = ModScanner.loadedIds();
 						List<Op> dropped = dropQueuedUpdates(queued, loaded);
 						List<Op> stale = dropStaleGroups(loaded);
-						Report built = ServerCap.apply(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), live, doc);
+						Report built = ServerCap.apply(Recommender.recommend(doc, launcherFlagged(hw), scanned, settings, data, g, modVersion, queued), live, doc);
 						// v0.5 (PLAN contracts 13a): the report post-steps, after ServerCap; ModrinthOffAdvice stays last.
 						return new Rebuilt(V05Hooks.afterRecommend(built, new V05Hooks.StepContext(this, doc, live)), dropped, stale, queued, loaded);
 					}, Probes.EXECUTOR)
@@ -397,6 +397,16 @@ public final class RealController implements RigTuneController {
 	}
 
 	private record Rebuilt(Report report, List<Op> dropped, List<Op> stale, Set<String> queued, Set<String> loaded) {
+	}
+
+	// #37: the rules' launcher-mods flag while the launcher keeps the mod list; a failing check leaves hw as it is.
+	private HardwareProfile launcherFlagged(HardwareProfile hw) {
+		try {
+			return modFiles().flagged(hw);
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("RigTune: could not tell who manages the mods for the report", e);
+			return hw;
+		}
 	}
 
 	// Also at exit: an updater can have queued its build since the last rebuild.
