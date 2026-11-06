@@ -1,6 +1,6 @@
 # RigTune — coordinator progress log
 
-Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
+**History, no longer updated.** This is the v0.1.0-v0.5.1 coordinator log (24-29 Sep 2026). Since 6 Nov 2026 RigTune is run by RigTune HQ, and the current state is in [docs/STATUS.md](STATUS.md), which wins wherever this file disagrees. The "Lessons" and "Decisions" sections below still apply.
 
 ## v0.5.1: RELEASED 2026-09-29 (UTC)
 - Fixes from the user's field check (Modrinth App 0.21.6, laptop): issues #17-#25, all closed.
