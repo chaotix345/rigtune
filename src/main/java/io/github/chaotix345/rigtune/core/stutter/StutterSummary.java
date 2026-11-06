@@ -94,7 +94,7 @@ public final class StutterSummary {
 			out.append("Phase timing unavailable\n");
 		}
 		if (r.facts().gcOffsetMs() == null) {
-			out.append("Garbage collection can't be timed yet: none since recording started\n");
+			out.append("Garbage collection can't be timed yet: Java hasn't collected garbage since recording started\n");
 		}
 		if (!advice.isEmpty()) {
 			out.append("Advice: ").append(String.join("; ", advice.stream().map(a -> MarkdownSafe.field(a.title())).toList())).append('\n');

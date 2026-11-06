@@ -285,6 +285,17 @@ public final class RigTuneClient implements ClientModInitializer {
 			spot = sodiumSpot(screen.children().stream().map(GuiEventListener::getRectangle).toList(), width, height);
 			if (spot == null) {
 				spot = new int[]{6, height - 26};
+				boolean[] placed = {false};
+				ScreenEvents.afterTick(screen).register(s -> {
+					if (placed[0]) {
+						return;
+					}
+					int[] later = sodiumSpot(s.children().stream().map(GuiEventListener::getRectangle).toList(), s.width, s.height);
+					if (later != null) {
+						button.setPosition(later[0], later[1]);
+						placed[0] = true;
+					}
+				});
 			}
 		} else {
 			AbstractWidget anchor = findByKey(widgets, title ? "menu.options" : "gui.done");

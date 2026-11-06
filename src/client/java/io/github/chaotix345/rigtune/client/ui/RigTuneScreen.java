@@ -70,6 +70,7 @@ public class RigTuneScreen extends Screen {
 	// Narrower than this (scaled px), the notice line is the message plus one "…" button to NoticeScreen (review X-M2).
 	private static final int NOTICE_INLINE_WIDTH = 400;
 	private static final int MIN_NOTICE_MESSAGE = 80;
+	private static final int MIN_LIST_WITH_BADGE_LINE = 3 * 24;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -139,23 +140,6 @@ public class RigTuneScreen extends Screen {
 				.withTooltip(g -> Tooltip.create(Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT) + ".tooltip")))
 				.create(left + titleWidth + MARGIN, 5, goalWidth, 20, Component.translatable("rigtune.screen.goal"), (button, goal) -> controller.setGoal(goal)));
 
-		tierBadge = shown == null ? null : tierBadge(shown);
-		int badgeRoom = badgeRight - (left + titleWidth + goalWidth + 2 * MARGIN);
-		boolean badgeInTitleRow = tierBadge != null && font.width(tierBadge) <= badgeRoom;
-		badgeLine = -1;
-		headerLines = shown == null ? List.of() : header(shown, badgeInTitleRow ? null : tierBadge);
-		headerTop = 30;
-		badgeArea = tierBadge == null ? null : badgeInTitleRow ? new ScreenRectangle(badgeRight - font.width(tierBadge), 11, font.width(tierBadge), LINE)
-				: badgeLine < 0 ? null : new ScreenRectangle(left, headerTop + badgeLine * LINE, Math.min(font.width(tierBadge), right - left), LINE);
-		tierTooltipLines = shown == null ? List.of() : tierTooltip(shown);
-		badgeComponent = tierBadge;
-		if (!badgeInTitleRow) {
-			tierBadge = null;
-		}
-		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
-		headerBottom += noticeLine(headerBottom);
-		int listTop = headerBottom + 4;
-
 		List<Button> buttons = new ArrayList<>();
 		applyButton = Button.builder(Component.translatable("rigtune.screen.apply"), b -> applySelected()).build();
 		buttons.add(applyButton);
@@ -194,6 +178,31 @@ public class RigTuneScreen extends Screen {
 		int footerTop = height - MARGIN / 2 - rows * 20 - (rows - 1) * GAP;
 		statusY = footerTop - LINE - 2;
 		int listBottom = statusY - 4;
+
+		tierBadge = shown == null ? null : tierBadge(shown);
+		int badgeRoom = badgeRight - (left + titleWidth + goalWidth + 2 * MARGIN);
+		boolean badgeInTitleRow = tierBadge != null && font.width(tierBadge) <= badgeRoom;
+		badgeLine = -1;
+		headerTop = 30;
+		headerLines = shown == null ? List.of() : header(shown, badgeInTitleRow ? null : tierBadge, false);
+		if (shown != null && !badgeInTitleRow) {
+			List<Component> split = header(shown, tierBadge, true);
+			int notice = NoticeBoard.select(controller.notices(), Set.of()).visible().isEmpty() ? 0 : NOTICE_ROW;
+			if (split.size() > headerLines.size() && roomForOwnBadgeLine(listBottom - (headerTop + headerLines.size() * LINE + 2 + notice + 4))) {
+				headerLines = split;
+			}
+		}
+		badgeArea = tierBadge == null ? null : badgeInTitleRow ? new ScreenRectangle(badgeRight - font.width(tierBadge), 11, font.width(tierBadge), LINE)
+				: badgeLine < 0 ? null : new ScreenRectangle(left, headerTop + badgeLine * LINE, Math.min(font.width(tierBadge), right - left), LINE);
+		tierTooltipLines = shown == null ? List.of() : tierTooltip(shown);
+		badgeComponent = tierBadge;
+		if (!badgeInTitleRow) {
+			tierBadge = null;
+		}
+		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
+		headerBottom += noticeLine(headerBottom);
+		int listTop = headerBottom + 4;
+
 
 		list = new RecommendationList(listTop, Math.max(20, listBottom - listTop));
 		populate(list);
@@ -285,7 +294,11 @@ public class RigTuneScreen extends Screen {
 		return shown == null ? null : tierBadge(shown).getString();
 	}
 
-	private List<Component> header(Report report, @Nullable Component badge) {
+	static boolean roomForOwnBadgeLine(int listHeight) {
+		return listHeight - LINE >= MIN_LIST_WITH_BADGE_LINE;
+	}
+
+	private List<Component> header(Report report, @Nullable Component badge, boolean ownBadgeLine) {
 		HardwareProfile hw = report.hardware();
 		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
 				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), Palette.of(COLOR_LABEL)));
@@ -310,7 +323,7 @@ public class RigTuneScreen extends Screen {
 			badgeLine = lines.size();
 			MutableComponent joined = Component.empty().append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))))
 					.append(displayRules);
-			if (font.width(joined) <= right - left) {
+			if (!ownBadgeLine || font.width(joined) <= right - left) {
 				lines.add(joined);
 			} else {
 				lines.add(badge);
@@ -335,6 +348,7 @@ public class RigTuneScreen extends Screen {
 	public List<Component> headerLines() {
 		return List.copyOf(headerLines);
 	}
+
 	/** v0.4 (docs/v0.4/SPEC.md 2b): a recommendation's title as the list draws it, or null (for the game tests). */
 	public @Nullable String titleOf(String recommendationId) {
 		return shown == null ? null : shown.recommendations().stream().filter(r -> r.id().equals(recommendationId)).findFirst()
@@ -701,7 +715,7 @@ public class RigTuneScreen extends Screen {
 	}
 
 	static int tooltipWidth(int screenWidth) {
-		return Math.max(40, Math.min(250, screenWidth - 24));
+		return Math.max(40, Math.min(250, screenWidth - 16));
 	}
 
 	@Override

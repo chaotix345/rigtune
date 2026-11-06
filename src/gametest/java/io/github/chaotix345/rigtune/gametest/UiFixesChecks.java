@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -28,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 final class UiFixesChecks {
-	private static final int[][] SIZES = {{1280, 720, 3}, {854, 480, 2}, {1280, 720, 2}};
+	private static final int[][] SIZES = {{1280, 720, 3}, {854, 480, 2}, {1280, 720, 2}, {640, 480, 2}};
 
 	private final List<String> failures = new ArrayList<>();
 
@@ -83,10 +84,16 @@ final class UiFixesChecks {
 			boolean readable = context.computeOnClient(mc -> ((RigTuneScreen) mc.gui.screen()).headerLines().stream()
 					.filter(l -> l.getString().contains("Rules r"))
 					.allMatch(l -> mc.font.width(l) <= column));
-			RigTune.LOGGER.info("UiFixesChecks: header at {}: {}", name, header);
+			int listHeight = context.computeOnClient(mc -> Screens.getWidgets(mc.gui.screen()).stream()
+					.filter(w -> w instanceof AbstractSelectionList<?>).mapToInt(AbstractWidget::getHeight).findFirst().orElse(0));
+			boolean ownLine = header.stream().anyMatch(l -> l.startsWith("Display "));
+			RigTune.LOGGER.info("UiFixesChecks: header at {} (list {} px): {}", name, listHeight, header);
 			check(header.stream().anyMatch(l -> l.contains("GPU, CPU, memory")), name + ": the badge lists the tie: " + header);
-			check(readable && header.stream().anyMatch(l -> l.contains("Rules r") && (l.contains("Online") || l.contains("Offline"))),
-					name + ": the display, rules and online status fit the column: " + header);
+			check(!ownLine || listHeight >= 72, name + ": a badge line of its own leaves the list 3 rows: " + listHeight);
+			if (size[0] != 640) {
+				check(readable && ownLine && header.stream().anyMatch(l -> l.contains("Rules r") && (l.contains("Online") || l.contains("Offline"))),
+						name + ": the display, rules and online status fit the column: " + header);
+			}
 		}
 	}
 

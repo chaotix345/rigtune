@@ -136,7 +136,11 @@ class StutterScreenTextTest {
 		assertNull(StutterScreen.gcShortLine(withFacts(gc, new StutterReport.Facts(null, 0, 0, 2, null)), List.of()), "explicit GCs");
 		assertNull(StutterScreen.gcShortLine(withFacts(gc, new StutterReport.Facts(80, 0, 0, 0, null)), List.of()), "nearly full memory");
 		assertNull(StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.2, Attributor.UNKNOWN, 0.8)),
-				List.of()), "not the top cause");
+				List.of()), "under 30%, and not the top cause");
+		assertNull(StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.4, Attributor.CHUNK_LOAD, 0.45,
+				Attributor.UNKNOWN, 0.15)), List.of()), "over 30% but not the top cause");
+		assertEquals(line, StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.45,
+				Attributor.CHUNK_LOAD, 0.45, Attributor.UNKNOWN, 0.1)), List.of()).getString(), "a tie for the top counts");
 		assertNull(StutterScreen.gcShortLine(report(new StutterReport.Spikes(30, 0, 0, 0), 20, Map.of(), Map.of(Attributor.GC, 0.25, Attributor.UNKNOWN, 0.05)),
 				List.of()), "under 30%");
 	}

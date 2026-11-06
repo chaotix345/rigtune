@@ -136,7 +136,7 @@ class StutterSummaryTest {
 		String text = StutterSummary.text(report(false, false, null), List.of());
 		assertTrue(text.contains("Not enough data yet"), text);
 		assertTrue(text.contains("Phase timing unavailable"), text);
-		assertTrue(text.contains("Garbage collection can't be timed yet: none since recording started"), text);
+		assertTrue(text.contains("Garbage collection can't be timed yet: Java hasn't collected garbage since recording started"), text);
 		assertFalse(text.contains("Advice:"));
 	}
 
