@@ -106,7 +106,7 @@ class BenchmarkSessionTest {
 		SessionResult result = session.result();
 		assertEquals(11, result.renderDistance().suggestedRd());
 		assertEquals(12, result.chosen().renderDistance());
-		assertEquals("Render distance 12 missed the target by less than 5% (1% lows 165 FPS), which is within a run's noise, so RigTune doesn't "
+		assertEquals("Render distance 12 missed the target by 5% or less (1% lows 165 FPS), which is within a run's noise, so RigTune doesn't "
 				+ "suggest lowering it.", ResultNotes.keptWithinNoise(result).english());
 	}
 
@@ -120,6 +120,18 @@ class BenchmarkSessionTest {
 		assertNull(ResultNotes.keptWithinNoise(result));
 		assertFalse(BenchmarkSession.missedWithinNoise(result.renderDistance(), 12, 170));
 		assertTrue(BenchmarkSession.missedWithinNoise(result.renderDistance(), 12, 168));
+	}
+
+	// The floor's boundary: exactly 5 % under the target (95 % of 200 = 190) is within the noise; just below it isn't.
+	// An incomplete row (its terrain hadn't loaded) never counts.
+	@Test
+	void theNoiseFloorsBoundary() {
+		PlannerResult at = new PlannerResult(11, true, 11, List.of(new PlannerResult.Measurement(12, low(190), false)), "test");
+		PlannerResult below = new PlannerResult(11, true, 11, List.of(new PlannerResult.Measurement(12, low(189.99), false)), "test");
+		PlannerResult incomplete = new PlannerResult(11, true, 11, List.of(new PlannerResult.Measurement(12, low(199), false, false)), "test");
+		assertTrue(BenchmarkSession.missedWithinNoise(at, 12, 200));
+		assertFalse(BenchmarkSession.missedWithinNoise(below, 12, 200));
+		assertFalse(BenchmarkSession.missedWithinNoise(incomplete, 12, 200));
 	}
 
 	@Test

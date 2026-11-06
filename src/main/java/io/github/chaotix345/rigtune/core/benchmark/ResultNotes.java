@@ -132,9 +132,10 @@ public final class ResultNotes {
 				|| !BenchmarkSession.missedWithinNoise(result, rd, session.targetFps())) {
 			return null;
 		}
-		long low = result.measurements().stream().filter(m -> m.rd() == rd).mapToLong(m -> Math.round(m.stats().onePercentLowFps())).findFirst().orElse(0);
+		long low = result.measurements().stream().filter(m -> m.rd() == rd && m.complete()).mapToLong(m -> Math.round(m.stats().onePercentLowFps()))
+				.findFirst().orElse(0);
 		return Text.of("rigtune.benchmark.within_noise",
-				"Render distance %s missed the target by less than 5%% (1%% lows %s FPS), which is within a run's noise, so RigTune doesn't suggest lowering it.",
+				"Render distance %s missed the target by 5%% or less (1%% lows %s FPS), which is within a run's noise, so RigTune doesn't suggest lowering it.",
 				rd, low);
 	}
 
