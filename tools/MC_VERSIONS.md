@@ -79,7 +79,10 @@ It refuses (exit 1, one line on stderr, nothing written) unless every check pass
    isn't among them, it says so but carries on.
 6. Fabric API has a build for it on Modrinth that is also in the Fabric maven's
    `maven-metadata.xml` (Gradle resolves it from there).
-7. Mod Menu has a build for it on Modrinth that is also on `maven.terraformersmc.com`.
+7. Mod Menu has a build for it on Modrinth that is also on `maven.terraformersmc.com`. For a
+   snapshot, pre-release or release candidate without one, the newest Mod Menu build for an earlier
+   pre-release of the same version is used instead, with a note (Mod Menu is compile-only, and it
+   skips snapshots: for 26.4 it built for snapshots 1, 3 and 6 only). A release still needs its own.
 
 Then it picks, from Modrinth (`loaders=["fabric"]`, releases before betas before alphas, the newest
 within each): Fabric API and Mod Menu (`version_number`), Sodium (`version_number`, the
@@ -217,7 +220,7 @@ snapshot. It takes `latest.snapshot` from the Mojang manifest, adds it as a node
 game-test legs, release.yml and update-rules.yml don't see it) and runs `./gradlew :<mc>:build`,
 which also compiles the game tests. It skips, with a green run, when the newest snapshot is the
 release or `add_mc_version.py` refuses it: a notice when the snapshot isn't ready yet (no Fabric
-API build, ...), a warning when the refusal needs a change here (another Java version, an id
+API build, no Mod Menu build for it or for an earlier snapshot of the same version, ...), a warning when the refusal needs a change here (another Java version, an id
 format the tool doesn't know). A network error or a crash of `add_mc_version.py` fails the run
 without an issue. Once a release is out the canary skips until the next snapshot: adding the
 release is the "Adding a version" flow above, and an issue still open from its snapshots stays

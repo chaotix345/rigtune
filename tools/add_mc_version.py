@@ -145,8 +145,8 @@ def fabric_loader_url(mc):
     return f"{FABRIC_META}/versions/loader/{urllib.parse.quote(mc, safe='')}"
 
 
-def modrinth_versions_url(project, mc):
-    query = urllib.parse.urlencode({"game_versions": json.dumps([mc]), "loaders": json.dumps(["fabric"])})
+def modrinth_versions_url(project, *mcs):
+    query = urllib.parse.urlencode({"game_versions": json.dumps(list(mcs)), "loaders": json.dumps(["fabric"])})
     return f"{MODRINTH_API}/project/{project}/version?{query}"
 
 
@@ -288,9 +288,9 @@ def previous_node(nodes, mc):
     return max(lower, key=version_key) if lower else min(known, key=version_key)
 
 
-def pick_on_maven(project, mc, http, metadata_url, host, label):
+def pick_on_maven(project, mc, http, metadata_url, host, label, game_versions=None):
     on_maven = maven_versions(http, metadata_url)
-    candidates = rank_modrinth(http.json(modrinth_versions_url(project, mc)))
+    candidates = rank_modrinth(http.json(modrinth_versions_url(project, *(game_versions or [mc]))))
     chosen = next((v for v in candidates if v["version_number"] in on_maven), None)
     if chosen is None:
         where = f" ({len(candidates)} on Modrinth, none of them on {host})" if candidates else ""
@@ -338,8 +338,25 @@ def build_plan(root, mc, http, prerelease_ok):
 
     fabric_api = pick_on_maven("fabric-api", mc, http, FABRIC_API_METADATA_URL, "maven.fabricmc.net", "Fabric API")
     facts.append(f"Fabric API: {fabric_api['version_number']} ({fabric_api['version_type']})")
-    modmenu = pick_on_maven("modmenu", mc, http, MODMENU_METADATA_URL, "maven.terraformersmc.com", "Mod Menu")
-    facts.append(f"Mod Menu: {modmenu['version_number']} ({modmenu['version_type']})")
+    try:
+        modmenu = pick_on_maven("modmenu", mc, http, MODMENU_METADATA_URL, "maven.terraformersmc.com", "Mod Menu")
+        facts.append(f"Mod Menu: {modmenu['version_number']} ({modmenu['version_type']})")
+    except Refusal:
+        if parsed.kind == "release":
+            raise
+        ids = [v.get("id") for v in manifest.get("versions", []) if isinstance(v.get("id"), str)]
+        earlier = [v for v in ids if MC_ID.fullmatch(v) and parse_mc_id(v).base == parsed.base
+                   and parse_mc_id(v).kind != "release" and version_key(v) < version_key(mc)]
+        if not earlier:
+            raise
+        modmenu = pick_on_maven("modmenu", mc, http, MODMENU_METADATA_URL, "maven.terraformersmc.com", "Mod Menu",
+                                game_versions=earlier)
+        built_for = ", ".join(v for v in modmenu.get("game_versions", []) if v in earlier) or "an earlier snapshot"
+        facts.append(f"Mod Menu: none for {mc}; {modmenu['version_number']} ({modmenu['version_type']}, for "
+                     f"{built_for}) is used")
+        notes.append(f"No Mod Menu build for {mc} yet: modmenu_version is {built_for}'s "
+                     f"{modmenu['version_number']} (compileOnly; dev runs may not load it). Update it when Mod Menu "
+                     f"ships for {mc}.")
 
     sodium = next(iter(rank_modrinth(http.json(modrinth_versions_url("sodium", mc)))), None)
     facts.append(f"Sodium: {sodium['version_number']} ({sodium['version_type']})" if sodium else f"Sodium: none for {mc}")
