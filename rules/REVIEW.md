@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 - New upstream mods to triage: 6
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 1
-- Rules changed or omitted in rules-v1.json: 46
+- Rules changed or omitted in rules-v1.json: 49
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 | slug | title | pack(s) | optimization category |
@@ -36,6 +36,9 @@ None found.
 | gpuTiers[29] (?i)Arc(?:\s*\(TM\))?\s*Pro\s*B50\b | omitted ("v1": false) |
 | gpuTiers[30] (?i)Arc(?:\s*\(TM\))?\s*Pro\s*B[67]\d\b | omitted ("v1": false) |
 | gpuTiers[32] (?i)Arc(?:\s*\(TM\))?\s*\d{3}T\b | omitted ("v1": false) |
+| mods[krypton] | v1 override: conflictsWith |
+| mods[zfastnoise] | v1 override: conflictsWith |
+| mods[zmaterial-rule-compiler] | v1 override: conflictsWith |
 | mods[nvidium] | v1 override: avoidWhen, recommendWhen |
 | mods[renderscale] | v1 override: reason, recommendWhen |
 | mods[lambdynamiclights] | omitted ("v1": false) |

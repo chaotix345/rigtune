@@ -245,8 +245,9 @@
 			"stability": "stable",
 			"reason": "Optimises Minecraft's networking code. The gain on your side is small and mostly shows on busy multiplayer servers.",
 			"recommendWhen": { "always": true },
-			"conflictsWith": ["zfastnoise", "zmaterial-rule-compiler"],
-			"defaultSelected": false
+			"conflictsWith": ["e4mc"],
+			"defaultSelected": false,
+			"v1": { "conflictsWith": ["zfastnoise", "zmaterial-rule-compiler", "e4mc"] }
 		},
 		{
 			"slug": "structure-layout-optimizer",
@@ -270,8 +271,9 @@
 			"stability": "beta",
 			"reason": "Speeds up vanilla's terrain noise generation, which cuts stutter from worldgen on your singleplayer world's built-in server. Its own issue tracker reports a rare chunk-generation crash when Lithium and C2ME are both installed, so it's off by default when C2ME is present.",
 			"recommendWhen": { "always": true },
-			"conflictsWith": ["moonrise-opt", "krypton", "c2me-fabric"],
-			"defaultSelected": false
+			"conflictsWith": ["moonrise-opt", "c2me-fabric"],
+			"defaultSelected": false,
+			"v1": { "conflictsWith": ["moonrise-opt", "krypton", "c2me-fabric"] }
 		},
 		{
 			"slug": "zmaterial-rule-compiler",
@@ -283,8 +285,9 @@
 			"stability": "beta",
 			"reason": "Compiles vanilla's surface-generation material rules into faster code, which cuts stutter from worldgen on your singleplayer world's built-in server. From the same project as Fast Noise, with the same rare chunk-generation crash risk when C2ME is installed.",
 			"recommendWhen": { "always": true },
-			"conflictsWith": ["moonrise-opt", "krypton", "c2me-fabric"],
-			"defaultSelected": false
+			"conflictsWith": ["moonrise-opt", "c2me-fabric"],
+			"defaultSelected": false,
+			"v1": { "conflictsWith": ["moonrise-opt", "krypton", "c2me-fabric"] }
 		},
 		{
 			"slug": "asynclogger",
