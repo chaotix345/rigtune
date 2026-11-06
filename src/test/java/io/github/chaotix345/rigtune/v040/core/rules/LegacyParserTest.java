@@ -30,7 +30,7 @@ class LegacyParserTest {
 	// (The same list as LegacyRulesParseTest's.)
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of("old-client-launcher-mods");
 	static final List<String> SETTINGS_ADDED_SINCE_R16 = List.of("dh.client.advanced.autoUpdater.enableAutoUpdater");
-	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag", "stutter-chunks-loading-tag-rd");
+	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag", "stutter-chunks-loading-tag-sodium");
 
 	private static String bundled() throws IOException {
 		try (InputStream in = RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE)) {

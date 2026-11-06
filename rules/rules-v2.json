@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "revision": 22,
-  "generatedAt": "2026-11-06T16:07:55Z",
+  "generatedAt": "2026-11-06T17:04:53Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -2648,6 +2648,22 @@
         "stutterTaggedShareAtLeast": {
           "chunksLoading": 60
         },
+        "spikesPerMinuteAtLeast": 20
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Hitches while chunks were loading",
+      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter may reduce them, and if you fly or explore a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play. RigTune offers a fix to try only when it could measure what loading chunks cost (\"Stutter while loading chunks\"); otherwise lower the render distance yourself and compare sessions."
+    },
+    {
+      "id": "stutter-chunks-loading-tag-sodium",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterTaggedShareAtLeast": {
+          "chunksLoading": 60
+        },
         "spikesPerMinuteAtLeast": 20,
         "modPresent": [
           "sodium"
@@ -2663,59 +2679,12 @@
               "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
             }
           }
-        ],
-        "not": {
-          "stutterShareAtLeast": {
-            "chunkLoad": 30
-          }
-        }
+        ]
       },
       "kind": "info",
       "impact": "low",
-      "title": "Hitches while chunks were loading",
-      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them. RigTune can't measure what loading chunks costs here, so it has no fix to try for it: change one of these yourself and compare sessions."
-    },
-    {
-      "id": "stutter-chunks-loading-tag-rd",
-      "requires": [
-        "stutter-doctor"
-      ],
-      "when": {
-        "stutterTaggedShareAtLeast": {
-          "chunksLoading": 60
-        },
-        "spikesPerMinuteAtLeast": 20,
-        "not": {
-          "anyOf": [
-            {
-              "stutterShareAtLeast": {
-                "chunkLoad": 30
-              }
-            },
-            {
-              "modPresent": [
-                "sodium"
-              ],
-              "anyOf": [
-                {
-                  "settingIs": {
-                    "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
-                  }
-                },
-                {
-                  "settingIs": {
-                    "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Hitches while chunks were loading",
-      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter may reduce them, and if you fly or explore a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play. RigTune can't measure what loading chunks costs here, so it has no fix to try for it: lower the render distance yourself and compare sessions."
+      "title": "Chunk Updates may add to the hitches",
+      "text": "Most of the hitches happened while chunks were loading nearby, and Sodium's Chunk Updates setting makes frames wait for chunk building. Setting it to Deferred (Sodium's default, on the Performance page of its video settings) may reduce them: frames stop waiting, though changed blocks may take a moment to appear."
     }
   ],
   "stutterFixes": [

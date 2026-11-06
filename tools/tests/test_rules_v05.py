@@ -548,29 +548,27 @@ class GeneratedV05Tests(unittest.TestCase):
             self.assertEqual(new.get("minModVersion"), old.get("minModVersion"))
 
     # L2 (SPEC 2S): one info entry on the tag, calibrated on P5C-F1's re-runs and AC5.8's A control (ChunksLoadingSeedTest).
-    # 0.5.2 (#44, #48): split in two, the Sodium text only while Chunk Updates isn't Deferred, and neither when the
-    # measured chunk-loading advice fires (both say there's no fix to try).
+    # 0.5.2 (#44, #48): the tag entry keeps r21's condition (so it's TRUE whenever r21's was, a missing Sodium setting or
+    # unmeasured phase timing included) without the Sodium half, says when a fix is offered, and a second entry suggests
+    # Deferred only while Chunk Updates is known not to be.
     def test_the_l2_seed(self):
-        not_deferred = {"modPresent": ["sodium"], "anyOf": [
-            {"settingIs": {"sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"}},
-            {"settingIs": {"sodium.performance.chunk_build_defer_mode": "ONE_FRAME"}}]}
-        measured = {"stutterShareAtLeast": {"chunkLoad": 30}}
         tag = {"stutterTaggedShareAtLeast": {"chunksLoading": 60}, "spikesPerMinuteAtLeast": 20}
         seed = self.stutter("stutter-chunks-loading-tag")
-        rd = self.stutter("stutter-chunks-loading-tag-rd")
-        self.assertEqual(seed["when"], dict(tag, **not_deferred, **{"not": measured}))
-        self.assertEqual(rd["when"], dict(tag, **{"not": {"anyOf": [measured, not_deferred]}}))
-        self.assertIn("Sodium", seed["text"])
-        self.assertNotIn("Sodium", rd["text"])
-        for rule in (seed, rd):
+        sodium = self.stutter("stutter-chunks-loading-tag-sodium")
+        self.assertEqual(seed["when"], tag)
+        self.assertEqual(sodium["when"], dict(tag, modPresent=["sodium"], anyOf=[
+            {"settingIs": {"sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"}},
+            {"settingIs": {"sodium.performance.chunk_build_defer_mode": "ONE_FRAME"}}]))
+        self.assertNotIn("Sodium", seed["text"])
+        self.assertIn("happened while chunks were loading", seed["text"])
+        self.assertIn("RigTune offers a fix to try only when it could measure", seed["text"])
+        self.assertIn("Deferred", sodium["text"])
+        for rule in (seed, sodium):
             self.assertEqual(rule["requires"], ["stutter-doctor"])
             self.assertEqual((rule["kind"], rule["impact"]), ("info", "low"))
-            self.assertIn("happened while chunks were loading", rule["text"])
             self.assertIn("may reduce them", rule["text"])
-            self.assertIn("no fix to try", rule["text"])
             self.assertNotIn("v1", rule)
         self.assertNotIn("stutterAdvice", self.v1)
-
 
 if __name__ == "__main__":
     unittest.main()
