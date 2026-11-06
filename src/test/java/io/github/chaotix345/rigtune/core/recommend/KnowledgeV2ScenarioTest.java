@@ -463,9 +463,13 @@ class KnowledgeV2ScenarioTest {
 			assertFalse(laptop.get("add:krypton").reason().contains("RigTune doesn't also offer"), laptop.get("add:krypton").reason());
 		}
 
-		// Additive ships Krypton with both: no conflict warning between them.
-		Map<String, Recommendation> additive = run(Fixtures.userRig(), "sodium", "lithium", "krypton", "zfastnoise", "zmatcomp");
-		assertTrue(additive.keySet().stream().noneMatch(id -> id.startsWith("conflict:") && id.contains("krypton")), additive.keySet().toString());
+		// Additive (a 26.3 pack) ships Krypton with both: no conflict warning between them, on either version.
+		for (String mc : List.of("26.2", "26.3")) {
+			Fixtures.Hw hw = Fixtures.userRig();
+			hw.mcVersion = mc;
+			Map<String, Recommendation> additive = run(hw, "sodium", "lithium", "krypton", "zfastnoise", "zmatcomp");
+			assertTrue(additive.keySet().stream().noneMatch(id -> id.startsWith("conflict:") && id.contains("krypton")), mc + " " + additive.keySet());
+		}
 	}
 
 	// Krypton issues #169/#170 (Nov 2026): the published Krypton 0.3.1 (26.2) and 0.3.2 (26.3) jars still @Redirect the login
@@ -480,6 +484,7 @@ class KnowledgeV2ScenarioTest {
 			Map<String, Recommendation> withE4mc = run(hw, "sodium", "e4mc");
 			assertFalse(withE4mc.containsKey("add:krypton"), mc + " " + withE4mc.keySet());
 			Map<String, Recommendation> both = run(hw, "sodium", "e4mc", "krypton");
+			assertTrue(both.containsKey("conflict:e4mc+krypton"), mc + " " + both.keySet());
 			assertEquals(Category.WARNING, both.get("conflict:e4mc+krypton").category(), mc + " " + both.keySet());
 		}
 	}
