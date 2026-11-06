@@ -180,12 +180,26 @@ class TryItTextTest {
 				LABELS);
 		assertEquals(List.of("No verdict: something else changed between the two measurements (resolution, the first run in a new benchmark world, "
 						+ "Distant Horizons was generating terrain, you moved, the loaded mods, a later change in History (Benchmark result), "
-						+ "Particles changed). Try it again for a verdict.",
+						+ "Particles changed). Let Distant Horizons finish generating first (its Show Generation Progress option shows when it's done), "
+						+ "then try it again.",
 				"For reference only: 1% lows +20.0%, average +10.0%.",
 				"These runs varied a lot (more than 5%), so the result is less certain.",
 				"Distant Horizons builds distant terrain in the background, which can make runs vary.",
 				"The two measurements were in different game sessions: a driver or background program change would show up here too."), english(lines));
 		assertEquals(Tone.WARNING, lines.getFirst().tone());
+	}
+
+	// #40: trying again at once doesn't help while Distant Horizons generates, so only the other causes say "Try it again".
+	@Test
+	void onlyADhExclusionSaysToLetItFinishFirst() {
+		Verdict moved = new Verdict(Kind.NOT_COMPARABLE, 2.0, 1.0, 5.0, List.of(new Cause.Moved()), List.of());
+		assertEquals("No verdict: something else changed between the two measurements (you moved). Try it again for a verdict.",
+				english(TryItText.verdict(moved, LABELS)).getFirst());
+		Verdict dh = new Verdict(Kind.NOT_COMPARABLE, 2.0, 1.0, 5.0, List.of(new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING)), List.of());
+		String line = english(TryItText.verdict(dh, LABELS)).getFirst();
+		assertTrue(line.contains("Let Distant Horizons finish generating first") && !line.contains("Try it again for a verdict"), line);
+		assertTrue(TryItText.excludedBefore(false).english().contains("Let it finish generating first"), TryItText.excludedBefore(false).english());
+		assertTrue(TryItText.excludedBefore(true).english().endsWith("Start the try again for a verdict."));
 	}
 
 	@Test
