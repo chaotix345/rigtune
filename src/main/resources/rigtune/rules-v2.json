@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 21,
-  "generatedAt": "2026-11-06T10:35:39Z",
+  "revision": 22,
+  "generatedAt": "2026-11-06T16:07:55Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1081,7 +1081,7 @@
       },
       "impact": "medium",
       "defaultSelected": false,
-      "reason": "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it."
+      "reason": "On this PC's estimated tier, 12 chunks is a good balance of view distance and frame rate; the benchmark can fine-tune it."
     },
     {
       "key": "vanilla.renderDistance",
@@ -1614,6 +1614,20 @@
       },
       "impact": "low",
       "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 6 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
+    },
+    {
+      "key": "dh.client.advanced.autoUpdater.enableAutoUpdater",
+      "value": false,
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "flags": [
+          "launcher-mods"
+        ]
+      },
+      "impact": "medium",
+      "reason": "Your launcher keeps its own list of this instance's mods, and Distant Horizons' own auto-updater replaces its jar behind the launcher's back, which can make the launcher's updates fail for the whole instance. With it off, update Distant Horizons in your launcher."
     },
     {
       "key": "iris.maxShadowRenderDistance",
@@ -2339,6 +2353,13 @@
     "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius": {
       "name": "LOD Chunk Render Distance Radius"
     },
+    "dh.client.advanced.autoUpdater.enableAutoUpdater": {
+      "name": "Auto Updater",
+      "values": {
+        "true": "On",
+        "false": "Off"
+      }
+    },
     "dh.client.advanced.graphics.quality.verticalQuality": {
       "name": "Vertical Quality",
       "values": {
@@ -2627,12 +2648,74 @@
         "stutterTaggedShareAtLeast": {
           "chunksLoading": 60
         },
-        "spikesPerMinuteAtLeast": 20
+        "spikesPerMinuteAtLeast": 20,
+        "modPresent": [
+          "sodium"
+        ],
+        "anyOf": [
+          {
+            "settingIs": {
+              "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
+            }
+          },
+          {
+            "settingIs": {
+              "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
+            }
+          }
+        ],
+        "not": {
+          "stutterShareAtLeast": {
+            "chunkLoad": 30
+          }
+        }
       },
       "kind": "info",
       "impact": "low",
       "title": "Hitches while chunks were loading",
-      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them."
+      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them. RigTune can't measure what loading chunks costs here, so it has no fix to try for it: change one of these yourself and compare sessions."
+    },
+    {
+      "id": "stutter-chunks-loading-tag-rd",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterTaggedShareAtLeast": {
+          "chunksLoading": 60
+        },
+        "spikesPerMinuteAtLeast": 20,
+        "not": {
+          "anyOf": [
+            {
+              "stutterShareAtLeast": {
+                "chunkLoad": 30
+              }
+            },
+            {
+              "modPresent": [
+                "sodium"
+              ],
+              "anyOf": [
+                {
+                  "settingIs": {
+                    "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
+                  }
+                },
+                {
+                  "settingIs": {
+                    "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Hitches while chunks were loading",
+      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter may reduce them, and if you fly or explore a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play. RigTune can't measure what loading chunks costs here, so it has no fix to try for it: lower the render distance yourself and compare sessions."
     }
   ],
   "stutterFixes": [

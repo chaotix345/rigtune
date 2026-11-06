@@ -487,14 +487,21 @@ class GeneratedV05Tests(unittest.TestCase):
         self.assertIn("shaders-entry-level", [a["id"] for a in self.v2["advice"]])
 
     # AC2R.1: against r16, the settings are the same entries in the same order and only L4's seven reasons differ, in both
-    # files (so keys, values, bounds, conditions and ticks are untouched).
+    # files (so keys, values, bounds, conditions and ticks are untouched). Since 0.5.2 (r22): #37's Distant Horizons
+    # auto-updater entry is new (v2 only), and #47's tier-4 render distance reason no longer argues only for raising it.
     def test_l4_changed_only_reasons(self):
         r16_v1 = repo_json("src", "test", "resources", "rules", "r16", "rules-v1.json")
+        tier4 = "On this PC's estimated tier, 12 chunks is a good balance of view distance and frame rate; the benchmark can fine-tune it."
         for name, old, new in (("rules-v2.json", self.r16, self.v2), ("rules-v1.json", r16_v1, self.v1)):
-            self.assertEqual(len(old["settings"]), len(new["settings"]), name)
+            settings = [s for s in new["settings"] if s["key"] != "dh.client.advanced.autoUpdater.enableAutoUpdater"]
+            self.assertEqual(len(new["settings"]) - len(settings), 1 if name == "rules-v2.json" else 0, name)
+            self.assertEqual(len(old["settings"]), len(settings), name)
             changed = []
-            for i, (before, after) in enumerate(zip(old["settings"], new["settings"])):
+            for i, (before, after) in enumerate(zip(old["settings"], settings)):
                 self.assertEqual({k: v for k, v in before.items() if k != "reason"}, {k: v for k, v in after.items() if k != "reason"}, f"{name} settings[{i}]")
+                if after.get("reason") == tier4:
+                    self.assertEqual(before["reason"], "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it.", name)
+                    continue
                 if before.get("reason") != after.get("reason"):
                     changed.append(i)
                     self.assertIn("entry-level", before["reason"], f"{name} settings[{i}]")
