@@ -127,7 +127,8 @@ public final class RealController implements RigTuneController {
 	});
 
 	private Minecraft minecraft;
-	private final RunRebuilds runRebuilds = new RunRebuilds(BenchmarkController::running);
+	// A lambda, not BenchmarkController::running: the method reference would load that class at construction.
+	private final RunRebuilds runRebuilds = new RunRebuilds(() -> BenchmarkController.running());
 	private final Path configDir;
 	private final Path modsDir;
 	private final Path pendingFile;
@@ -219,7 +220,7 @@ public final class RealController implements RigTuneController {
 
 	public void start(Minecraft minecraft) {
 		this.minecraft = minecraft;
-		BenchmarkController.afterRestore(() -> {
+		RunRebuilds.onRestored(() -> {
 			if (runRebuilds.release()) {
 				rebuild();
 			}

@@ -145,9 +145,6 @@ public final class BenchmarkController {
 	private static @Nullable BenchmarkController active;
 	private static @Nullable Outcome lastOutcome;
 	private static @Nullable Pending pendingWorld;
-	// #42: RealController's report rebuild, run once the settings are restored.
-	private static volatile Runnable afterRestore = () -> {
-	};
 	private static Config defaultConfig = Config.DEFAULT;
 	private static @Nullable Consumer<Step> sweepListener;
 	// docs/v0.5/SPEC.md 6 (C09, WS-T): Try it claims its own runs' outcomes (their pair id), so they open no result screen.
@@ -413,11 +410,6 @@ public final class BenchmarkController {
 		return active != null || pendingWorld != null;
 	}
 
-	public static void afterRestore(@Nullable Runnable rebuild) {
-		afterRestore = rebuild != null ? rebuild : () -> {
-		};
-	}
-
 	public static @Nullable Outcome lastOutcome() {
 		return lastOutcome;
 	}
@@ -654,11 +646,8 @@ public final class BenchmarkController {
 		});
 		stutterSteps.close();
 		StutterHooks.benchmarkFinished(!run.cancelled());
-		try {
-			afterRestore.run();
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.error("Benchmark: could not rebuild the RigTune report", e);
-		}
+		// #42: the report rebuild that waited for the restore.
+		RunRebuilds.restored();
 		safely("show the HUD", () -> {
 			if (minecraft.gui.hud.isHidden() != hudWasHidden) {
 				minecraft.gui.hud.toggle();
