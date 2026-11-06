@@ -9,21 +9,26 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - No earlier coordinator threads or scheduled tasks exist in T3: v0.1-v0.5.1 ran as Claude Code CLI sessions (docs/PROGRESS.md, now history).
 
 ## Where it stands
-- Released: **0.5.1** (29 Sep) for MC 26.2 and 26.3, on GitHub; Modrinth versions 0.5.1+mc26.2 (5Zq8LVfK) and +mc26.3 (FqlSEw70) uploaded and listed, but **the Modrinth project still isn't public**: the public API returns 404 for `oBN6pcGa` on 6 Nov, 5+ weeks after submission. Why is unknown (moderation queue, or a moderator message nobody has read).
-- Rules: **r20 live on main** (6 Nov, PR #50; raw rules-v1.json and rules-v2.json both return revision 20). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 makes it push the branch and leave the PR to HQ. Known rules problem in the live rules: Krypton is offered alongside e4mc (Fabulously Optimized ships it), which breaks joining singleplayer worlds; fix in progress.
-- CI on main green (last runs 29 Sep). Snapshot canary: failed 28 Oct on 26.4-snapshot-6 (real compile breaks, #49), then "passed" 4 Nov by wrongly skipping snapshot-7: the canary is blind until the worker fix lands.
-- Artifacts: 8,863 (~138 GB, 90-day default) being deleted on 6 Nov; retention-days fix in progress.
-- Open issues: 16 (#33, #35-#49). Nothing closed since 29 Sep. No open security alerts.
+- Released: **0.5.1** (29 Sep) for MC 26.2 and 26.3, on GitHub; Modrinth versions 0.5.1+mc26.2 (5Zq8LVfK) and +mc26.3 (FqlSEw70) uploaded. **The Modrinth project is still "Under review"**: Charlie's dashboard (6 Nov) says it is in the moderation queue, with no moderator message ("we aim to review within a week, but some projects may face delays"). The public API returns 404 until it's approved. Submitted around 25 Sep.
+- Rules: **r20 live on main** (6 Nov, PR #50; raw rules-v1.json and rules-v2.json both return revision 20). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 (merged) makes it push the branch and leave the PR to HQ. Known problem in the live rules: Krypton is offered alongside e4mc (Fabulously Optimized and Additive ship it), which breaks joining singleplayer worlds; the fix (r21) is PR #55, in review.
+- CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (PR #56 fixes it). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
+- Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). The purge of the old 8,859 (~138 GB) is running.
+- Open issues: 15 (#35-#49). #33 fixed by PR #53. No open security alerts.
 - Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
 
-## Release plan (proposed 6 Nov; needs Charlie's OK)
-1. **0.5.2, fix batch** (recommended next, ~2-3 worker-days plus a release run): the 0.5.1 field-test fixes #35-#48 (UI and wording now; logic batch #37, #40-#42, #44-#46, #48 after it), #33 evaluator, the canary and retention fixes, rules r20+. Same MC versions (26.2, 26.3). Ship once both fix batches merge and main is green; target the week of 23 Nov.
-2. **0.6.0, MC 26.4** when 26.4 is released and Sodium and Iris support it (not before; DESIGN.md says no pre-release nodes). Includes the 26.4 port (size from the #49 survey), the v0.6 backlog in docs/PROGRESS.md (preLaunch history reconcile off the render thread, review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run), and a decision on dropping 26.2.
+## Goals (Charlie, 6 Nov)
+- RigTune is a portfolio piece with steady downloads; getting the Modrinth listing public comes first. No deadline given.
+- Charlie's time: about 15 minutes a week (approving releases, a ~15-minute laptop check per release). Budget: $0.
+- RigTune stays under his GitHub name (chaotix345). GitHub CI stays on.
+
+## Release plan (6 Nov)
+1. **0.5.2, fix batch** (next, ~2-3 worker-days plus a release run; pre-approved as a patch): the 0.5.1 field-test fixes #35-#48 (UI and wording now; logic batch #37, #40-#42, #44-#46, #48 after it), the #33 evaluator, canary and retention fixes, rules r21+. Same MC versions (26.2, 26.3). Ship once both fix batches merge, main is green and the dry run passes; give Charlie a heads-up and the laptop-check kit first. Target the week of 23 Nov.
+2. **0.6.0, MC 26.4** (needs Charlie's OK) when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (preLaunch history reconcile off the render thread, review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run) and a decision on dropping 26.2.
 
 ## Numbers
 | Date | Source | Number |
 |---|---|---|
-| 2026-11-06 | Modrinth oBN6pcGa | not public (API 404); downloads and followers not visible |
+| 2026-11-06 | Modrinth oBN6pcGa (Charlie's screenshot; the API is 404 until approved) | 20 downloads, 1 follower; under review |
 | 2026-11-06 | GitHub release downloads (main jars) | 0.1.0: 454; 0.2.0: 448 + 72; 0.3.0: 306 + 71; 0.4.0: 128 + 122; 0.5.0: 3 + 3; 0.5.1: 2 + 2 (26.2 + 26.3). Mostly CI: the E2E downloads old release jars on every run, so real installs are unknown. |
 | 2026-11-06 | GitHub repo | 0 stars, 0 forks, 0 watchers |
 | 2026-11-06 | Traffic (14 days) | 12 views (7 unique), 20 clones (12 unique); referrer Google 3 views |
@@ -33,13 +38,14 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
-| 2026-11-06 | The setup questions (goal, weekly time, budget, pre-approvals, GitHub name, CI) | In the HQ setup report. |
-| 2026-11-06 | Modrinth: is the project stuck in review, or is there a moderator message? | Check modrinth.com > Dashboard > Projects > RigTune and Notifications, or give HQ a read-only Modrinth token (`request_secret`, saved as a named file). |
 | since 2026-09-28 | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward: needs his OK. Low priority. |
 
 ## Approved by Charlie
 - 2026-09-27: per-call ns footprint budgets in tools/footprint-budgets.json may change (e.g. min(ceiling, 4 x max observed)); ceilings, CPU-ms, bytes, 0-allocation and leak checks stay strict (docs/PROGRESS.md v0.5.0).
-- Nothing else standing: every release, tag and Modrinth change needs his OK.
+- 2026-11-06: HQ merges the weekly rules PRs on its own review (docs/hq.md "Rules updates").
+- 2026-11-06: patch releases (0.5.x) once the dry run passes, with a heads-up to Charlie first. Minor and major releases (0.6.0 on) still need his OK each time, as do Modrinth edits.
+- 2026-11-06: HQ may delete the leftover v0.5 scratch branches and worktrees.
+- 2026-11-06: RigTune stays under chaotix345; GitHub CI stays on.
 
 ## Waiting on others
 - Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
@@ -49,6 +55,8 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - 2026-11-09: first rules bot run under HQ (Mon 14:00); the weekly review opens its PR (docs/hq.md "Rules updates"). With PR #52 merged, the bot run should succeed with a "HQ opens the PR" notice.
 - 2026-11-11: snapshot canary (Wed 05:00 UTC, 16:00 Sydney): it must build the newest 26.4 snapshot, not skip, once the canary fix is merged.
 - 2026-11-13: billing check: November's `rigtune`/`nemesis-mod` storage stopped growing after the purge.
+- 2026-11-16 (then weekly): Krypton's stale jars (astei/krypton #169). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
+- 2026-11-20: if RigTune is still "Under review" on Modrinth (8 weeks), recommend to Charlie that he asks Modrinth's moderators or support (outward: his OK).
 
 ## Money
 - None spent. GitHub Pro via Education (to 29 Oct 2028). RigTune's Actions storage was fully discounted ($0 net).
@@ -56,18 +64,19 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:e287e2d9555d14ef290311b7759623393f5946914c15325ba1791a27461be651> | ci/artifact-retention-and-rules-bot | .github/workflows/*, tools/tests/test_ci_workflow.py | PR #52 reviewed, auto-merge queued |
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:4e7a726b427f49de14f11976135183130f1d077297e28cf69a227334899bb912> | fix/snapshot-canary-49 | tools/snapshot_canary.py + tests/fixtures, docs/research/v0.6/ | running |
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:13b68de6ef08e087e34e77af0ddbf1f4626c06d2cb8c91ab484f2c0f8d749839> | fix/stutter-e2e-33 | tools/e2e/stutter_run.py + its tests | PR #53 reviewed, auto-merge queued |
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:4e7a726b427f49de14f11976135183130f1d077297e28cf69a227334899bb912> | fix/snapshot-canary-49 | tools/add_mc_version.py, tools/MC_VERSIONS.md, canary tests, docs/research/v0.6/ | PR #56 reviewed, auto-merge queued |
 | <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:d392cdcae50606b32dee4893cc363c1631763980c0c5f659d6eca8d865a43d61> | fix/0.5.2-ui-wording | src/ UI screens, en_us.json (#35 #36 #38 #39 #43 #47) | running |
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:b7c20f9590d123c0a74874b6a8ff3be4c8ec112497022bf57f70716e36af820c> | fix/rules-krypton-conflicts | rules/, rules scenario tests | running (Krypton vs e4mc; stale Krypton vs Fast Noise conflict) |
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:b7c20f9590d123c0a74874b6a8ff3be4c8ec112497022bf57f70716e36af820c> | fix/rules-krypton-conflicts | rules/, rules scenario tests | PR #55 (r21), fresh review running |
 
 Next worker after the UI batch merges: the 0.5.2 logic batch (#37, #40, #41, #42, #44, #45, #46, #48; it also touches en_us.json and rules/source/knowledge.json).
 
 ## Housekeeping
-- Local branches in C:\Dev\rigtune from v0.5 (fix/, research/, scratch/, local/, tmp/, throwaway/) and old worktrees `C:\Dev\Worktrees\rigtune-audit-verify` and `rigtune-realworld`; remote `scratch/*`, `research/v05-*`, `fix/v05-*` branches and the scratch workflows they register. The weekly review removes what is merged or provably superseded and lists the rest for Charlie.
+- 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). Kept, because they hold commits that aren't on main: remote and local `fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, local `local/v05-battery`. The weekly review checks each against main (`git cherry`, `git diff origin/main...<b>`) before deleting.
+- Local unmerged branches can't be deleted from a thread (a user hook blocks `git branch -D`); they cost nothing, so they stay.
+- Old worktrees `C:\Dev\Worktrees\rigtune-audit-verify` and `rigtune-realworld`: their branches are merged, but both have uncommitted files (AuditVerify*/RealWorld* tests; an edited ApplyExecutor.java) and broken links to the repo's old folder ("C:/Dev/Minecraft Setting Optimisation Mod"). Kept; don't delete without saving those files first.
 - This PC ran short of memory on 6 Nov with four workers building (two Gradle runs died with out-of-memory errors and passed on retry): keep at most two Gradle-building workers at once.
 
 ## Recent changes
+- 2026-11-06 PRs #52, #53, #54: artifact retention + the rules bot leaves the PR to HQ; #33 stutter evaluator fixed; STATUS/hq.md update. Charlie answered the setup questions (Goals, Approved by Charlie).
 - 2026-11-06 PR #51: RigTune HQ set up (STATUS.md, docs/hq.md, CLAUDE.md, release guard hook, attribution off); PROGRESS.md marked as history.
 - 2026-11-06 PR #50: rules r20 live (Krypton and Particle Core on 26.3, FO/Additive lists). HQ fixed a scenario test that pinned "Krypton has no 26.3 build". All five `bot/rules-update-*` branches deleted. Artifact purge started.

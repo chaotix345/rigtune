@@ -27,7 +27,7 @@ python -m unittest discover -s tools/tests
 
 ## CI (overrides the skill: "CI and GitHub billing", the CI-local rule)
 
-RigTune is public and uses only standard `ubuntu-24.04` runners, which are free for public repos, so its GitHub CI stays on and `ci-ok` (build.yml) stays the required check. Charlie's question on whether to keep it is in STATUS.md "Waiting on Charlie". The local gate still runs before every PR.
+RigTune is public and uses only standard `ubuntu-24.04` runners, which are free for public repos, so its GitHub CI stays on and `ci-ok` (build.yml) stays the required check (Charlie's decision, 6 Nov 2026). The local gate still runs before every PR.
 
 - Workflows: `build.yml` (push and PR; `ci-ok` aggregates its jobs), `e2e.yml` (reusable; called by build.yml and release.yml), `release.yml` (`v*` tag; dispatch = dry run), `update-rules.yml` (Mon 03:00 UTC), `snapshot-canary.yml` (Wed 05:00 UTC). Sydney is UTC+11 in summer (Oct-Apr) and UTC+10 in winter, so the rules bot lands at 14:00 or 13:00 Sydney.
 - The cost is artifact storage, not minutes. Every upload sets `retention-days` (7 for CI, 30 for `release-files`). The weekly review checks `gh api repos/chaotix345/rigtune/actions/artifacts --jq .total_count` and the billing API (RigTune shows as `rigtune` and as its old name `nemesis-mod`). Before 6 Nov 2026 it stored ~138 GB (US$31.89 gross in October, fully discounted).
@@ -53,7 +53,7 @@ RigTune is public and uses only standard `ubuntu-24.04` runners, which are free 
 
 ## Releasing
 
-Releases are tag-driven and **public**: pushing a `v*` tag runs `release.yml` (build once, E2E release tier on the staged jars, GitHub release, Modrinth publish to project `oBN6pcGa`, verify). Only admins may push `v*` tags (ruleset "release tags"), and every thread uses Charlie's admin `gh`, so the release guard hook (`.claude/hooks/guard_release.py`, below) blocks tag pushes, `gh release` writes, release.yml dispatches and release re-runs outside HQ. **Every release needs Charlie's OK in chat** (STATUS.md "Approved by Charlie" records standing approvals).
+Releases are tag-driven and **public**: pushing a `v*` tag runs `release.yml` (build once, E2E release tier on the staged jars, GitHub release, Modrinth publish to project `oBN6pcGa`, verify). Only admins may push `v*` tags (ruleset "release tags"), and every thread uses Charlie's admin `gh`, so the release guard hook (`.claude/hooks/guard_release.py`, below) blocks tag pushes, `gh release` writes, release.yml dispatches and release re-runs outside HQ. **Patch releases (0.5.x) are pre-approved** once the dry run passes, with a heads-up to Charlie before the tag; **minor and major releases need his OK in chat** (STATUS.md "Approved by Charlie").
 
 1. Release PR (worker or HQ): `mod_version=<x.y.z>` in `gradle.properties`, `CHANGELOG.md`, the Modrinth body in `docs/modrinth/` if it changes. Gate, merge, and wait for main's build to be green on the merge commit.
 2. Dry run (publishes nothing): `gh workflow run release.yml --ref main` (HQ only; the guard allows it here). It must pass build, E2E release tier, the Modrinth preflight and the printed upload.
