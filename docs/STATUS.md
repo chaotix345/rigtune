@@ -1,6 +1,6 @@
 # Status
 
-HQ owns this file and rewrites it (not appends). Workers report to HQ instead of editing it. Last updated: 2026-11-06 by RigTune HQ (setup).
+HQ owns this file and rewrites it (not appends). Workers report to HQ instead of editing it. Last updated: 2026-11-07 by RigTune HQ.
 
 ## HQ
 - Thread: <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:1a6f4b05932c9083d4ba76e4ee9cf8df5f6b97d3b474dec8790b8c3b8db68746> (pinned, "RigTune HQ"). Thread id: `mcp:launch:1a6f4b05932c9083d4ba76e4ee9cf8df5f6b97d3b474dec8790b8c3b8db68746` (workers `t3_thread_send` here). Project id: `951159fe-96cd-4205-939b-630793975b28`. Worktree: `C:\Users\Admin\.t3\worktrees\rigtune\chore-rigtune-hq-setup` (HQ marker in its git dir, `C:\Dev\rigtune\.git\worktrees\chore-rigtune-hq-setup\rigtune-hq`).
@@ -13,7 +13,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - Rules: **r21 live on main** (6 Nov, PR #55; raw rules-v1.json and rules-v2.json both return revision 21). r21: Krypton conflicts with e4mc (its 0.3.x jars break joining singleplayer worlds with e4mc, which Fabulously Optimized and Additive ship); the unsupported Krypton vs Fast Noise / Material Rule Compiler conflict is gone from v2 (0.1.x keeps it via v1 overrides). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 makes it push the branch and leave the PR to HQ.
 - CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
 - Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). Purge done 6 Nov: 253 left (4 release-files from Sep, 249 expiring within 7 days), from 8,863 (~138 GB).
-- Open issues: 15 (#35-#49). #33 fixed by PR #53. No open security alerts.
+- Open issues: 10 (#37, #40-#42, #44-#49). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58). PR #60 closes #37 #40 #41 #42 #44 #45 #48. No open security alerts.
 - Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
 
 ## Goals (Charlie, 6 Nov)
@@ -22,7 +22,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - RigTune stays under his GitHub name (chaotix345). GitHub CI stays on.
 
 ## Release plan (6 Nov)
-1. **0.5.2, fix batch** (next, ~2-3 worker-days plus a release run; pre-approved as a patch): the 0.5.1 field-test fixes #35-#48 (UI and wording now; logic batch #37, #40-#42, #44-#46, #48 after it), the #33 evaluator, canary and retention fixes, rules r21+. Same MC versions (26.2, 26.3). Ship once both fix batches merge, main is green and the dry run passes; give Charlie a heads-up and the laptop-check kit first. Target the week of 23 Nov.
+1. **0.5.2, fix batch** (next, ~2-3 worker-days plus a release run; pre-approved as a patch): the 0.5.1 field-test fixes #35-#48 (UI and wording merged 7 Nov, PR #58; logic batch PR #60 with rules r22; #46 as a small follow-up), the #33 evaluator, canary and retention fixes, rules r21+. Same MC versions (26.2, 26.3). Ship once both fix batches merge, main is green and the dry run passes; give Charlie a heads-up and the laptop-check kit first. Target the week of 23 Nov.
 2. **0.6.0, MC 26.4** (needs Charlie's OK) when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (preLaunch history reconcile off the render thread, review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run) and a decision on dropping 26.2.
 
 ## Numbers
@@ -63,9 +63,9 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:d392cdcae50606b32dee4893cc363c1631763980c0c5f659d6eca8d865a43d61> | fix/0.5.2-ui-wording | src/ UI screens, en_us.json (#35 #36 #38 #39 #43 #47) | PR #58: CI game tests fail (header split shrinks the list at 640x480, FirstApplyGameTest AC8.18) + fresh review "fix first"; both sent back, worker fixing |
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:6fc90fe3b09e4061f1103461d1a993df4d94627ecb8e4b65d4b614dcc2818b77> | fix/0.5.2-logic | src/ logic and tests, en_us.json, rules/source/knowledge.json + generated rules, docs/research/knowledge.md, docs/RULES_SCHEMA.md | PR #60 (7 Nov; rules r22, live on merge): gate passed for the worker; HQ review and gate under way; worker adding the `launcher-mods` flag to RULES_SCHEMA.md |
 
-Next worker after PR #58 merges: the 0.5.2 logic batch (#37, #40, #41, #42, #44, #45, #46, #48, and #47 item 3 in knowledge.json; it also touches en_us.json and rules/source/knowledge.json). Fold in PR #55's review nits (the Additive scenario on 26.3, an assertTrue before the e4mc warning lookup, a DownloadPlanner test for Krypton + Fast Noise, a pointer in docs/research/knowledge.md to r21) and keep #43's new "Let it finish generating first" advice consistent with #40.
+#46 (staged changes to the same key, "applied 4 changes" for no net change): HQ chose the worker's option 2 on 7 Nov. Count net changes in the launch toast and hide "Discard pending" when the queue nets to nothing; the staging model, History and Undo stay as documented (audit M1, "2n"). It goes to the same worker as a new task once #60 merges. Then the 0.5.2 release (a pre-approved patch): dry run, a heads-up to Charlie with the laptop-check kit, then tag from HQ.
 
 ## Housekeeping
 - 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). Kept, because they hold commits that aren't on main: remote and local `fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, local `local/v05-battery`. The weekly review checks each against main (`git cherry`, `git diff origin/main...<b>`) before deleting.
@@ -74,6 +74,7 @@ Next worker after PR #58 merges: the 0.5.2 logic batch (#37, #40, #41, #42, #44,
 - This PC ran short of memory on 6 Nov with four workers building (two Gradle runs died with out-of-memory errors and passed on retry): keep at most two Gradle-building workers at once.
 
 ## Recent changes
+- 2026-11-07 PR #58 merged: 0.5.2 UI and wording fixes (#35 #36 #38 #39 #43, #47 items 1, 2, 4-8). Logic-batch PR #60 opened. docs/hq.md worker brief: new hard limit, no `rm` in Bash, no force branch delete, no `git restore` (Charlie, via Blindstamp HQ: workers stalled on approval prompts overnight).
 - 2026-11-06 PRs #55, #56, #57: rules r21 live (Krypton/e4mc; stale Fast Noise conflict); the canary's add_mc_version fix and the 26.4 survey (docs/research/v0.6/mc-26.4.md: ~12 agent-hours); STATUS update. Artifact purge finished.
 - 2026-11-06 PRs #52, #53, #54: artifact retention + the rules bot leaves the PR to HQ; #33 stutter evaluator fixed; STATUS/hq.md update. Charlie answered the setup questions (Goals, Approved by Charlie).
 - 2026-11-06 PR #51: RigTune HQ set up (STATUS.md, docs/hq.md, CLAUDE.md, release guard hook, attribution off); PROGRESS.md marked as history.
