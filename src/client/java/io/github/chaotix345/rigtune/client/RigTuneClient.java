@@ -37,7 +37,9 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.options.VideoSettingsScreen;
@@ -280,7 +282,10 @@ public final class RigTuneClient implements ClientModInitializer {
 				.build();
 		int[] spot;
 		if (screen.getClass().getName().equals(SODIUM_VIDEO_SCREEN)) {
-			spot = new int[]{6, height - 26};
+			spot = sodiumSpot(screen.children().stream().map(GuiEventListener::getRectangle).toList(), width, height);
+			if (spot == null) {
+				spot = new int[]{6, height - 26};
+			}
 		} else {
 			AbstractWidget anchor = findByKey(widgets, title ? "menu.options" : "gui.done");
 			spot = anchor == null ? null : place(anchor, widgets, width, title);
@@ -307,6 +312,25 @@ public final class RigTuneClient implements ClientModInitializer {
 		int[][] candidates = preferLeft ? new int[][]{{left, anchor.getY()}, {right, anchor.getY()}} : new int[][]{{right, anchor.getY()}, {left, anchor.getY()}};
 		for (int[] c : candidates) {
 			if (c[0] >= 2 && c[0] + BUTTON_WIDTH <= width - 2 && free(c[0], c[1], widgets)) {
+				return c;
+			}
+		}
+		return null;
+	}
+
+	static int @Nullable [] sodiumSpot(List<ScreenRectangle> children, int width, int height) {
+		List<ScreenRectangle> actions = children.stream().filter(r -> r.width() == 65 && r.height() == 20 && r.top() > height / 2).toList();
+		if (actions.isEmpty()) {
+			return null;
+		}
+		int top = actions.stream().mapToInt(ScreenRectangle::top).min().orElseThrow();
+		int bottom = actions.stream().mapToInt(ScreenRectangle::bottom).max().orElseThrow();
+		int left = actions.stream().mapToInt(ScreenRectangle::left).min().orElseThrow();
+		int right = actions.stream().mapToInt(ScreenRectangle::right).max().orElseThrow();
+		for (int[] c : new int[][]{{right - BUTTON_WIDTH, top - 25}, {left - 5 - BUTTON_WIDTH, bottom - 20}}) {
+			ScreenRectangle spot = new ScreenRectangle(c[0], c[1], BUTTON_WIDTH, 20);
+			if (c[0] >= 2 && c[1] >= 2 && c[0] + BUTTON_WIDTH <= width - 2 && c[1] + 20 <= height
+					&& children.stream().noneMatch(r -> r.width() > 0 && r.height() > 0 && r.intersects(spot))) {
 				return c;
 			}
 		}

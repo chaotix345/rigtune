@@ -348,7 +348,7 @@ class LauncherRepairServiceTest {
 		assertEquals(NoticePriority.LAUNCHER_REPAIR, notice.priority());
 		assertTrue(notice.key().startsWith(LauncherRepair.KEY_PREFIX), notice.key());
 		assertEquals("Fix the Modrinth App's mod list", notice.message().english());
-		assertTrue(notice.detail().english().contains("for each old copy (sodium-0.7.0.jar.disabled),"), notice.detail().english());
+		assertTrue(notice.detail().english().contains("look for each old copy by its file name: sodium-0.7.0.jar.disabled (RigTune's newer copy: sodium-0.7.1.jar)."), notice.detail().english());
 		assertTrue(notice.detail().english().contains("RigTune also added: fastquit.jar."), notice.detail().english());
 		assertTrue(notice.dismissible());
 		assertEquals(List.of("Copy steps"), notice.actions().stream().map(a -> a.label().english()).toList());

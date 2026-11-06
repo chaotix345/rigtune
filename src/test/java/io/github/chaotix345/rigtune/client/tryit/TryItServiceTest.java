@@ -375,7 +375,7 @@ class TryItServiceTest {
 		game.playerTicks = 20 * 10 + 5;
 		Text settling = service.settling(Scene.CURRENT);
 		assertNotNull(settling);
-		assertEquals("Try It measures better once the world has settled. Play for about a minute first (50 s left).", settling.english());
+		assertEquals("Try it measures better once the world has settled. Play for about a minute first (50 s left).", settling.english());
 		assertFalse(service.start(rec(), Scene.CURRENT).getString().isEmpty(), "Start answers with the status line");
 		game.drain();
 		assertNull(store().current(), "no try opened");

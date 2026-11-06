@@ -37,6 +37,8 @@ public final class StubController implements RigTuneController {
 	private final List<Notice> notices = new ArrayList<>();
 	private final Set<String> dismissed = new HashSet<>();
 	private final List<String> noticeActions = new ArrayList<>();
+	private boolean tiedTiers;
+	private @Nullable Component status;
 
 	public StubController(Supplier<@Nullable HardwareProfile> hardware) {
 		this.hardware = hardware;
@@ -98,6 +100,20 @@ public final class StubController implements RigTuneController {
 		return List.copyOf(noticeActions);
 	}
 
+	public void tieTiers() {
+		tiedTiers = true;
+		this.report = build();
+	}
+
+	public void setStatus(Component status) {
+		this.status = status;
+	}
+
+	@Override
+	public @Nullable Component status() {
+		return status;
+	}
+
 	@Override
 	public void rescan() {
 		this.report = build();
@@ -142,7 +158,7 @@ public final class StubController implements RigTuneController {
 				new Recommendation("advice-driver", Category.ADVICE, Impact.MEDIUM, "Update your GPU driver",
 						"Sodium enabled a driver workaround for your GPU. A newer driver may fix the underlying issue and improve performance.",
 						new Action.None(), false));
-		TierResult tier = new TierResult(4, Math.clamp(4 + goal.tierOffset(), 1, 5), 5, 4, 5, "cpu");
+		TierResult tier = tiedTiers ? new TierResult(5, 5, 5, 5, 5, "gpu") : new TierResult(4, Math.clamp(4 + goal.tierOffset(), 1, 5), 5, 4, 5, "cpu");
 		// docs/v0.4/SPEC.md 2j: what each tier rests on, for the tier badge's tooltip.
 		TierBasis basis = new TierBasis(new TierBasis.Gpu(5, TierBasis.Basis.TABLE_MATCH, "(?i)rx\\s*7[89]00", GpuVendor.AMD, false),
 				new TierBasis.Cpu(4, TierBasis.Basis.FALLBACK_ESTIMATE, null, 16, 4201), new TierBasis.Memory(5, TierBasis.Basis.TABLE_MATCH, 6144));

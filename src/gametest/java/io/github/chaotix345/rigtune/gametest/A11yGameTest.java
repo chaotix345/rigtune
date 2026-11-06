@@ -678,7 +678,7 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	private static String settleRow(ClientGameTestContext context) {
 		return context.computeOnClient(mc -> ((io.github.chaotix345.rigtune.client.ui.TryItScreen) mc.gui.screen()).rowText().stream()
-				.filter(line -> line.startsWith("Try It measures better once the world has settled")).findFirst()
+				.filter(line -> line.startsWith("Try it measures better once the world has settled")).findFirst()
 				.orElseThrow(() -> new AssertionError("no settle line: " + ((io.github.chaotix345.rigtune.client.ui.TryItScreen) mc.gui.screen()).rowText())));
 	}
 
@@ -1631,7 +1631,7 @@ public class A11yGameTest implements FabricClientGameTest {
 				context.waitTicks(3);
 				tabUntilNarrates(context, "notice screen, held " + name, heldMessage);
 				String repairSaid = tabUntilNarrates(context, "notice screen, repair " + name, repairMessage);
-				check(repairSaid.contains("for each old copy"), "the repair notice's steps are narrated with it: " + repairSaid);
+				check(repairSaid.contains("look for each old copy"), "the repair notice's steps are narrated with it: " + repairSaid);
 				context.takeScreenshot("a11y-launcher-notices-" + name);
 			}
 		} finally {

@@ -301,17 +301,24 @@ public class RigTuneScreen extends Screen {
 		MutableComponent online = report.online()
 				? Component.translatable("rigtune.header.online").withStyle(s -> s.withColor(Palette.of(COLOR_OK)))
 				: Component.translatable("rigtune.header.offline").withStyle(ChatFormatting.GOLD);
-		MutableComponent last = Component.empty();
-		if (badge != null) {
-			badgeLine = lines.size();
-			last.append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
-		}
-		last.append(Component.translatable("rigtune.header.display_rules",
+		Component displayRules = Component.translatable("rigtune.header.display_rules",
 				value(display(hw.display())),
 				value(Integer.toString(report.rulesRevision())),
 				value(report.rulesSource()),
-				online).withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
-		lines.add(last);
+				online).withStyle(s -> s.withColor(Palette.of(COLOR_LABEL)));
+		if (badge != null) {
+			badgeLine = lines.size();
+			MutableComponent joined = Component.empty().append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))))
+					.append(displayRules);
+			if (font.width(joined) <= right - left) {
+				lines.add(joined);
+			} else {
+				lines.add(badge);
+				lines.add(displayRules);
+			}
+		} else {
+			lines.add(displayRules);
+		}
 		if (!settings.networkEnabled) {
 			lines.add(Component.translatable("rigtune.screen.header.network_off").withStyle(ChatFormatting.GOLD));
 		} else if (!settings.modrinth) {
@@ -328,7 +335,6 @@ public class RigTuneScreen extends Screen {
 	public List<Component> headerLines() {
 		return List.copyOf(headerLines);
 	}
-
 	/** v0.4 (docs/v0.4/SPEC.md 2b): a recommendation's title as the list draws it, or null (for the game tests). */
 	public @Nullable String titleOf(String recommendationId) {
 		return shown == null ? null : shown.recommendations().stream().filter(r -> r.id().equals(recommendationId)).findFirst()
@@ -690,8 +696,12 @@ public class RigTuneScreen extends Screen {
 		}
 		graphics.text(font, ComponentRenderUtils.clipText(text, font, maxWidth), x, y, color, false);
 		if (mouseX >= x && mouseX < x + maxWidth && mouseY >= y && mouseY < y + 9) {
-			graphics.setTooltipForNextFrame(font, text, mouseX, mouseY);
+			graphics.setTooltipForNextFrame(font, font.split(text, tooltipWidth(width)), mouseX, mouseY);
 		}
+	}
+
+	static int tooltipWidth(int screenWidth) {
+		return Math.max(40, Math.min(250, screenWidth - 24));
 	}
 
 	@Override

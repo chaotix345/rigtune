@@ -71,6 +71,10 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, 1200);
 		context.waitFor(mc -> ClientSettings.load(configDir).privacyNoticeShown, 200);
+		UiFixesChecks.run(context);
+		if (Boolean.getBoolean("rigtune.gametest.uiFixesOnly")) {
+			return;
+		}
 
 		RigTuneController real = RigTuneClient.controller();
 		context.getInput().setCursorPos(1, 1);
@@ -352,6 +356,8 @@ public class UiGameTest implements FabricClientGameTest {
 			waitForSaved(context, configDir, s -> !s.networkEnabled, "networkEnabled=false saved to settings.json");
 			check(context.computeOnClient(mc -> !findCycle(mc.gui.screen(), "rigtune.settings.remote_rules").active
 					&& !findCycle(mc.gui.screen(), "rigtune.settings.modrinth").active), "finer switches inactive while the network is off");
+			check(context.computeOnClient(mc -> findCycle(mc.gui.screen(), "rigtune.settings.remote_rules").getMessage().getString().endsWith("ON (network off)")),
+					"#47: a greyed switch says the network is off");
 			context.takeScreenshot("ui-settings-network-off");
 			pressByKey(context, "gui.done");
 			context.waitForScreen(RigTuneScreen.class);

@@ -180,10 +180,12 @@ class LauncherRepairTest {
 
 		assertEquals("Fix the Modrinth App's mod list", LauncherRepair.message(Launcher.MODRINTH_APP).english());
 		String detail = LauncherRepair.detail(findings, Launcher.MODRINTH_APP).english();
-		assertEquals(WHY + " With the game closed, for each old copy (a-1.jar.disabled, b-1.jar.disabled), start in the Modrinth App: open"
-				+ " this instance → Content. If it's listed there, switched off (filter State → Disabled), delete it; RigTune's newer version"
-				+ " stays. If it isn't listed, it still blocks Update all: delete RigTune's newer copy of that mod in Content, rename the old"
-				+ " copy from .jar.disabled to .jar in the instance's mods folder, press Refresh in Content, then Update it. RigTune also"
+		assertEquals(WHY + " With the game closed, start in the Modrinth App: open this instance → Content and look for each old copy by its"
+				+ " file name: a-1.jar.disabled (RigTune's newer copy: a-2.jar); b-1.jar.disabled (RigTune's newer copy: b-2.jar). Content may"
+				+ " also list that mod's newer version: that's RigTune's newer copy, not the old one. If the old copy is listed there, switched"
+				+ " off (filter State → Disabled), delete it; RigTune's newer copy stays. If it isn't listed, it still blocks Update all: delete"
+				+ " RigTune's newer copy in Content, rename the old copy from .jar.disabled to .jar in the instance's mods folder, press Refresh"
+				+ " in Content, then Update it. RigTune also"
 				+ " added: x.jar, y.jar. The app lists them as your own files and will update them itself; nothing to do.", detail);
 	}
 

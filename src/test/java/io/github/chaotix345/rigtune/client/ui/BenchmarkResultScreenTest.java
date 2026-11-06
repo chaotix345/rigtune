@@ -36,6 +36,13 @@ class BenchmarkResultScreenTest {
 	}
 
 	@Test
+	void issue43ThePairCaveatNeverFolds() {
+		assertArrayEquals(new int[]{1, 1, 2, 1}, BenchmarkResultScreen.fit(new int[]{1, 2, 2, 2}, 5, 0, 0, 2), "the others fold, the caveat stays wrapped");
+		assertArrayEquals(new int[]{1, 1, 2}, BenchmarkResultScreen.fit(new int[]{1, 2, 2}, 3, 0, 0, 2), "even past maxRows");
+		assertArrayEquals(new int[]{2, 1}, BenchmarkResultScreen.fit(new int[]{2, 2}, 3, 0, 0, -1), "no caveat: as before");
+	}
+
+	@Test
 	void theChartDateIsTheLocalDay() {
 		assertEquals("09-26", BenchmarkResultScreen.chartDate("2026-09-25T20:05:31Z", ZoneOffset.ofHours(10)));
 		assertEquals("09-25", BenchmarkResultScreen.chartDate("2026-09-25T20:05:31Z", ZoneOffset.UTC));

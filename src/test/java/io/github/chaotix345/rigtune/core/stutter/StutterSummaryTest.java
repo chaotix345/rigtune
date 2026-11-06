@@ -136,8 +136,16 @@ class StutterSummaryTest {
 		String text = StutterSummary.text(report(false, false, null), List.of());
 		assertTrue(text.contains("Not enough data yet"), text);
 		assertTrue(text.contains("Phase timing unavailable"), text);
-		assertTrue(text.contains("GC timing not calibrated yet"), text);
+		assertTrue(text.contains("Garbage collection can't be timed yet: none since recording started"), text);
 		assertFalse(text.contains("Advice:"));
+	}
+
+	@Test
+	void issue47AnEmptySessionSaysSoInsteadOfZeros() {
+		StutterReport r = report(false, false, null);
+		StutterReport empty = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), 0, 0, 0, 0, 0, new long[9], new long[9],
+				new StutterReport.Spikes(0, 0, 0, 0), 0, Map.of(), Map.of(), List.of(), new StutterReport.Facts(null, 0, 0, 0, null), List.of(), false, false, 0);
+		assertEquals("**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 6144 MB heap\nNo frames recorded yet\n", StutterSummary.text(empty, List.of()));
 	}
 
 	@Test
