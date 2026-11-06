@@ -437,10 +437,12 @@ class KnowledgeV2ScenarioTest {
 		assertFalse(laptop.containsKey("add:zfastnoise"), laptop.keySet().toString());
 		assertTrue(laptop.get("add:krypton").reason().contains(WORLDGEN_KEPT_OUT), laptop.get("add:krypton").reason());
 
-		// Krypton has no 26.3 build, so there the two are offered when C2ME isn't.
+		// Krypton has had a 26.3 build since rules r20 (Krypton 0.3.2), so on 26.3 too it keeps the two out and names them.
 		celeron.mcVersion = "26.3";
 		Map<String, Recommendation> later = run(celeron, "sodium", "lithium");
-		assertTrue(later.containsKey("add:zfastnoise") && later.containsKey("add:zmaterial-rule-compiler"), later.keySet().toString());
+		assertFalse(later.containsKey("add:zfastnoise"), later.keySet().toString());
+		assertFalse(later.containsKey("add:zmaterial-rule-compiler"), later.keySet().toString());
+		assertTrue(later.get("add:krypton").reason().contains(WORLDGEN_KEPT_OUT), later.get("add:krypton").reason());
 	}
 
 	// Phase 5 finding 3.
