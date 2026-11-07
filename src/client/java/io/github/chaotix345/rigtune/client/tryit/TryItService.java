@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.tryit;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.Busy;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
+import io.github.chaotix345.rigtune.client.PendingNetCheck;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
@@ -986,8 +987,10 @@ public final class TryItService {
 
 		@Override
 		public @Nullable Object pendingStamp() {
-			Object file = stamp(PendingActions.defaultPath(configDir()));
-			return "missing".equals(file) ? null : List.of(file, controller.modFiles());
+			Path pending = PendingActions.defaultPath(configDir());
+			// #46: the answer also depends on the config files' values (PendingNet), so their stamps count too.
+			List<Object> files = PendingNetCheck.stamp(pending, ConfigTargets.all(configDir()));
+			return PendingNetCheck.MISSING.equals(files.getFirst()) ? null : List.of(files, controller.modFiles());
 		}
 
 		@Override

@@ -234,7 +234,7 @@ public final class RigTuneClient implements ClientModInitializer {
 	// count when the journal can't be read.
 	static ApplyResult.Counts netCounts(ApplyResult result) {
 		try {
-			Journal journal = ClientJournal.get();
+			Journal.Snapshot journal = ClientJournal.get().snapshot();
 			if (journal.state() == Journal.State.OK) {
 				return NetChanges.counts(result, journal.entries());
 			}
