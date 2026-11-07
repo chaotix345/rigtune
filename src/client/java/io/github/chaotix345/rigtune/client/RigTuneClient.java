@@ -15,6 +15,8 @@ import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.NetChanges;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
@@ -228,11 +230,25 @@ public final class RigTuneClient implements ClientModInitializer {
 		}
 	}
 
+	// #46: the helper's result counted in net changes per settings key, from the journal's staged changes; the plain op
+	// count when the journal can't be read.
+	static ApplyResult.Counts netCounts(ApplyResult result) {
+		try {
+			Journal.Snapshot journal = ClientJournal.get().snapshot();
+			if (journal.state() == Journal.State.OK) {
+				return NetChanges.counts(result, journal.entries());
+			}
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read RigTune's history for the applied count", e);
+		}
+		return result.counts();
+	}
+
 	public static void showNotices(Minecraft minecraft) {
 		ApplyResult result = RigTunePreLaunch.takeUnseenResult();
 		if (result != null) {
 			// v0.5 (docs/v0.5/SPEC.md 4f): failed counts FAILED ops only; dropped ones only in their own toast.
-			for (HelperToasts.Toast toast : HelperToasts.result(result)) {
+			for (HelperToasts.Toast toast : HelperToasts.result(netCounts(result))) {
 				SystemToast.add(minecraft.gui.toastManager(), toast.kind() == HelperToasts.Kind.RESULT ? NOTICE_ID : new SystemToast.SystemToastId(10000L),
 						toast.title(), toast.body());
 			}

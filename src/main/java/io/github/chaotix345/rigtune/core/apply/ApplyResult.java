@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToIntFunction;
 
 public record ApplyResult(String finishedAt, List<OpResult> results) {
 	public enum Status {
@@ -39,6 +40,12 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 	}
 
 	public Counts counts() {
+		return counts(List::size);
+	}
+
+	// #46: as counts(), but the applied groups' config patches, in the order the helper ran them, count as patchChanges
+	// says (NetChanges: the keys whose value ended up different from before the queue) instead of one change each.
+	public Counts counts(ToIntFunction<List<PendingActions.Op>> patchChanges) {
 		Map<String, List<OpResult>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < results.size(); i++) {
 			OpResult r = results.get(i);
@@ -50,6 +57,7 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 		int applied = 0;
 		int failed = 0;
 		int dropped = 0;
+		List<PendingActions.Op> patches = new ArrayList<>();
 		for (List<OpResult> group : groups.values()) {
 			int changes = changes(group);
 			if (group.stream().anyMatch(r -> r.status() == null || r.status() == Status.FAILED)) {
@@ -57,10 +65,20 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 			} else if (group.stream().anyMatch(r -> r.status() == Status.ABANDONED)) {
 				dropped += changes;
 			} else {
-				applied += changes;
+				List<PendingActions.Op> groupPatches = group.stream().map(OpResult::op).filter(ApplyResult::isPatch).toList();
+				applied += changes - groupPatches.size();
+				patches.addAll(groupPatches);
 			}
 		}
+		if (!patches.isEmpty()) {
+			applied += patchChanges.applyAsInt(results.stream().map(OpResult::op).filter(patches::contains).toList());
+		}
 		return new Counts(applied, failed, dropped);
+	}
+
+	private static boolean isPatch(PendingActions.Op op) {
+		return op != null && (op.type() == PendingActions.Type.PATCH_JSON || op.type() == PendingActions.Type.PATCH_TOML
+				|| op.type() == PendingActions.Type.PATCH_PROPERTIES);
 	}
 
 	// As LauncherRepair.modChanges: a group's disables and enables pair up; a config patch is a change of its own.

@@ -140,6 +140,8 @@ public final class RealController implements RigTuneController {
 	private int carriedOverOps;
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 	private final Staging staging;
+	// #46: whether pending.json changes anything at exit (hasPendingChanges, the restart line).
+	private final PendingNetCheck pendingNet;
 	private final UndoService undoService;
 	// v0.4 (docs/v0.4/SPEC.md C4): one service per feature, each its workstream's own file.
 	private final ProfileService profileService;
@@ -180,6 +182,7 @@ public final class RealController implements RigTuneController {
 		this.goal = state.goalOrDefault();
 		this.carriedOverOps = Math.max(0, staged.recount(pendingFile));
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
+		this.pendingNet = new PendingNetCheck(pendingFile, staging.targets());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
 				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels(), this::modFiles)
@@ -613,7 +616,8 @@ public final class RealController implements RigTuneController {
 	// from it the mod changes the next exit's helper holds for the player's choice in a launcher-managed instance, which
 	// a restart never applies. The held ops are the service's last read (in memory; none before it has read them).
 	private void restartParts(List<Component> parts) {
-		if (pendingChanges() > 0) {
+		// #46: a queue that changes nothing at exit (switches back and forth) has nothing for a restart to finish.
+		if (pendingChanges() > 0 && hasPendingChanges()) {
 			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
 		}
 		V05Services services = v05;
@@ -769,9 +773,10 @@ public final class RealController implements RigTuneController {
 		return new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion);
 	}
 
+	// #46: pending.json that changes nothing at exit (switches back and forth) offers nothing to discard.
 	@Override
 	public boolean hasPendingChanges() {
-		return Files.isRegularFile(pendingFile);
+		return pendingNet.changesSomething();
 	}
 
 	// v0.5 (docs/v0.5/SPEC.md 4d; a coordinator-approved exception to the frozen file): pending.json changed outside this

@@ -44,6 +44,14 @@ class HelperToastsTest {
 		return toasts.stream().map(t -> key(t.title()) + args(t.title())).toList();
 	}
 
+	// #46: a queue that ended every setting where it started (A -> B -> A before a restart) counts no net change, so there
+	// is no "applied" toast; NetChanges' net count is what the toast says.
+	@Test
+	void noNetChangeShowsNoAppliedToast() {
+		assertEquals(List.of(), HelperToasts.result(new ApplyResult.Counts(0, 0, 0)));
+		assertEquals(List.of("rigtune.toast.applied.title[1]"), titles(HelperToasts.result(new ApplyResult.Counts(1, 0, 0))));
+	}
+
 	@Test
 	void abandonedOnlyShowsTheDroppedToastAlone() {
 		assertEquals(List.of("rigtune.toast.abandoned.title[2]"), titles(HelperToasts.result(of(Status.ABANDONED, Status.ABANDONED))));
