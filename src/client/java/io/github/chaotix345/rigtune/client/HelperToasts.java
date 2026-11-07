@@ -22,7 +22,11 @@ public final class HelperToasts {
 	// 4f: "N of M changes failed" counts FAILED ops only (retried at exit); ABANDONED ones (dropped: failed 3 times, or the
 	// mod was installed another way) appear only in the dropped toast; the applied toast counts the applied ops.
 	public static List<Toast> result(ApplyResult result) {
-		ApplyResult.Counts counts = result.counts();
+		return result(result.counts());
+	}
+
+	// #46: counts as NetChanges gives them, so a queue that ended every setting where it started says nothing applied.
+	public static List<Toast> result(ApplyResult.Counts counts) {
 		List<Toast> out = new ArrayList<>();
 		if (counts.failed() > 0) {
 			out.add(new Toast(Kind.RESULT, Component.translatable("rigtune.toast.failed.title", counts.failed(), counts.total()),

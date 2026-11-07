@@ -47,6 +47,7 @@ import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.apply.PendingNet;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
@@ -140,6 +141,8 @@ public final class RealController implements RigTuneController {
 	private int carriedOverOps;
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 	private final Staging staging;
+	// #46: hasPendingChanges()'s last read, and the files' stamps it was read at.
+	private volatile @Nullable PendingNetRead pendingNet;
 	private final UndoService undoService;
 	// v0.4 (docs/v0.4/SPEC.md C4): one service per feature, each its workstream's own file.
 	private final ProfileService profileService;
@@ -769,9 +772,33 @@ public final class RealController implements RigTuneController {
 		return new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion);
 	}
 
+	// #46: pending.json that changes nothing at exit (switches back and forth) offers nothing to discard. Read again only
+	// when pending.json or a config file it patches changed; an unreadable plan counts as pending, as before.
 	@Override
 	public boolean hasPendingChanges() {
-		return Files.isRegularFile(pendingFile);
+		if (!Files.isRegularFile(pendingFile)) {
+			return false;
+		}
+		try {
+			List<Object> stamp = new ArrayList<>();
+			stamp.add(Files.getLastModifiedTime(pendingFile));
+			for (ConfigTargets.Target target : staging.targets()) {
+				stamp.add(Files.isRegularFile(target.file()) ? Files.getLastModifiedTime(target.file()) : null);
+			}
+			PendingNetRead read = pendingNet;
+			if (read != null && read.stamp().equals(stamp)) {
+				return read.changes();
+			}
+			boolean changes = PendingNet.changesSomething(PendingActions.load(pendingFile).ops(), staging.configKeys()::current);
+			pendingNet = new PendingNetRead(stamp, changes);
+			return changes;
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read {}; offering to discard it", pendingFile.getFileName(), e);
+			return true;
+		}
+	}
+
+	private record PendingNetRead(List<Object> stamp, boolean changes) {
 	}
 
 	// v0.5 (docs/v0.5/SPEC.md 4d; a coordinator-approved exception to the frozen file): pending.json changed outside this

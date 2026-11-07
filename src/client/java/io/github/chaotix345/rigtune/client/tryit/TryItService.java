@@ -13,10 +13,12 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.TryItScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.apply.PendingNet;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
@@ -993,8 +995,10 @@ public final class TryItService {
 			Path file = PendingActions.defaultPath(configDir());
 			try {
 				PendingActions plan = PendingActions.load(file);
-				int held = HelperLauncher.holds(controller.modFiles()) ? ApplyExecutor.held(plan, file).size() : 0;
-				return plan.ops().size() > held;
+				List<PendingActions.Op> held = HelperLauncher.holds(controller.modFiles()) ? ApplyExecutor.held(plan, file) : List.of();
+				// #46: ops that end every key on its file's value (switches back and forth) change nothing at exit.
+				List<PendingActions.Op> runs = plan.ops().stream().filter(op -> !held.contains(op)).toList();
+				return PendingNet.changesSomething(runs, Staging.configKeys(ConfigTargets.all(configDir()))::current);
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Try it: could not read {}; counting its changes as waiting", file.getFileName(), e);
 				return true;
