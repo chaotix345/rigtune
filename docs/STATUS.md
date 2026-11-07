@@ -10,7 +10,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - No earlier coordinator threads or scheduled tasks exist in T3: v0.1-v0.5.1 ran as Claude Code CLI sessions (docs/PROGRESS.md, now history).
 
 ## Where it stands
-- Released: **0.5.1** (29 Sep) for MC 26.2 and 26.3, on GitHub; Modrinth versions 0.5.1+mc26.2 (5Zq8LVfK) and +mc26.3 (FqlSEw70) uploaded. **The Modrinth project is still "Under review"**: Charlie's dashboard (6 Nov) says it is in the moderation queue, with no moderator message ("we aim to review within a week, but some projects may face delays"). The public API returns 404 until it's approved. Submitted around 25 Sep.
+- Released: **0.5.2** (7 Nov 2026) for MC 26.2 and 26.3: tag v0.5.2 at f15e8436, release run 42343609374. GitHub release https://github.com/chaotix345/rigtune/releases/tag/v0.5.2 has the main and sources jars for both versions. Modrinth has 0.5.2+mc26.2 (nFIvBLPX) and +mc26.3 (hhiDEjf1); release.yml's verify step matched each sha512, the CDN file, version number, game version, loader and type. Before that: 0.5.1 (29 Sep; Modrinth 5Zq8LVfK, FqlSEw70). Charlie ran the 0.5.2 check on his desktop (RX 7800 XT, 180 Hz, Modrinth App): all 9 steps passed. The Modrinth description is the 0.5.2 rewrite (PR #65; Charlie pasted it 7 Nov). **The Modrinth project is still "Under review"**: Charlie's dashboard (6 Nov) says it is in the moderation queue, with no moderator message ("we aim to review within a week, but some projects may face delays"). The public API returns 404 until it's approved. Submitted around 25 Sep.
 - Rules: **r22 live on main** (7 Nov, PR #60; raw rules-v1.json and rules-v2.json both return revision 22). r22 adds three things:
   - turning off Distant Horizons' auto-updater where a launcher manages the mods (new `launcher-mods` flag, so 0.5.2+ only);
   - the chunk-loading stutter advice split: a general entry as in r21, plus a separate Sodium Chunk Updates entry only when that setting isn't Deferred;
@@ -19,7 +19,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
 - Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). Purge done 6 Nov: 253 left (4 release-files from Sep, 249 expiring within 7 days), from 8,863 (~138 GB).
 - Open issues: 1 (#49, the 26.4 canary). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
-- **0.5.2 is ready to tag**: main f15e8436 (release PR #64 and the Modrinth body PR #65 merged 7 Nov). The release dry run passed (run 42340370468: build, the full E2E release tier, the Modrinth preflight with both versions free, and the printed upload). Its tested jars are in `C:\Users\Admin\Downloads\rigtune-0.5.2-test` for Charlie's laptop check (docs/release/0.5.2-laptop-check.md). Tag `v0.5.2` at f15e8436 once he reports back.
+- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. A rules fix (r23) is with the worker.
 - Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
 
 ## Goals (Charlie, 6 Nov)
@@ -28,7 +28,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - RigTune stays under his GitHub name (chaotix345). GitHub CI stays on.
 
 ## Release plan (6 Nov)
-1. **0.5.2, fix batch** (pre-approved as a patch): the 0.5.1 field-test fixes #35-#48 (PRs #58, #60 and #63, all merged 7 Nov), the #33 evaluator, canary and retention fixes, and rules r20-r22. Same MC versions (26.2, 26.3). The fixes, the release PR (#64) and the dry run are done; only the laptop check and the tag remain (see "Where it stands").
+1. **0.5.2**: released 7 Nov (see "Where it stands"). The next patch (0.5.3) only if a bug needs code; rules fixes ship on main without a release.
 2. **0.6.0, MC 26.4** (needs Charlie's OK) when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (preLaunch history reconcile off the render thread, review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run) and a decision on dropping 26.2.
 
 ## Numbers
@@ -44,8 +44,6 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
-| since 2026-11-07 | 0.5.2 laptop check (~15 min, docs/release/0.5.2-laptop-check.md; jars in `C:\Users\Admin\Downloads\rigtune-0.5.2-test`) | HQ tags v0.5.2 when he reports pass. A failure: logs back to HQ, fix, new dry run. |
-| since 2026-11-07 | Paste docs/modrinth/body.md (PR #65) into the Modrinth listing's description | No token on this PC, so `sync-body` can't run from HQ. About 2 minutes, in his Modrinth project settings. |
 | since 2026-09-28 | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward: needs his OK. Low priority. |
 
 ## Approved by Charlie
@@ -72,7 +70,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-None. The 0.5.2 worker (<t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:6fc90fe3b09e4061f1103461d1a993df4d94627ecb8e4b65d4b614dcc2818b77>; PRs #60, #63, #64, #65) is idle and can take fixes from the laptop check.
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:6fc90fe3b09e4061f1103461d1a993df4d94627ecb8e4b65d4b614dcc2818b77> | fix/rules-rd-reason-dh | rules/source/knowledge.json and the generated rules, the recommender's reason joining if needed, scenario tests | started 7 Nov: render distance reasons that argue against the change (tier 5 + Distant Horizons), rules r23 if it's text only |
 
 Left for later, from PR #63's review (nits): NetChanges counts from the first journal "before", so a file edited to C while the queue ends at A undercounts the launch toast (NetChanges.java:44); PendingNet's `SettingValues.same` ignores case and quotes (PendingNet.java:35). Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
@@ -83,6 +81,7 @@ Left for later, from PR #63's review (nits): NetChanges counts from the first jo
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Still keep at most two Gradle-building workers at once.
 
 ## Recent changes
+- 2026-11-07 **0.5.2 released** (tag v0.5.2 at f15e8436, run 42343609374; Modrinth nFIvBLPX and hhiDEjf1). Charlie's check on his desktop passed all 9 steps. He pasted the new Modrinth description. Ops PR #66 was the first merge HQ waited on with a background poll.
 - 2026-11-07 PRs #63, #64, #65 merged: #46 and #47 (net changes only, after a review round); release PR (mod_version 0.5.2, CHANGELOG, laptop check); Modrinth body rewrite (Charlie approved). The release dry run passed (run 42340370468). HQ lost about an hour three times waiting on auto-merges that never woke it; docs/hq.md "Merging" now says how to wait.
 - 2026-11-07 PR #60 merged: the 0.5.2 logic batch (#37 #40 #41 #42 #44 #45 #48, #47 item 3). Rules r22 is live; raw v1 and v2 both show 22. A fresh review caught that r22 would drop the chunk-loading advice when chunk loading isn't measured; the worker fixed it before the merge. #46 (option 2) went to the same worker. The RAM runbook pointer was added to "HQ".
 - 2026-11-07 PR #58 merged: 0.5.2 UI and wording fixes (#35 #36 #38 #39 #43, #47 items 1, 2, 4-8). Logic-batch PR #60 opened. docs/hq.md worker brief: new hard limit, no `rm` in Bash, no force branch delete, no `git restore` (Charlie, via Blindstamp HQ: workers stalled on approval prompts overnight).
