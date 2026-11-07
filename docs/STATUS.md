@@ -18,7 +18,8 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
   r21 (6 Nov, PR #55): Krypton conflicts with e4mc (its 0.3.x jars break joining singleplayer worlds with e4mc, which Fabulously Optimized and Additive ship); the unsupported Krypton vs Fast Noise / Material Rule Compiler conflict is gone from v2 (0.1.x keeps it via v1 overrides). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 makes it push the branch and leave the PR to HQ.
 - CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
 - Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). Purge done 6 Nov: 253 left (4 release-files from Sep, 249 expiring within 7 days), from 8,863 (~138 GB).
-- Open issues: 3. #46 is in progress. #47 is fully done and closes with the #46 PR. #49 is the 26.4 canary. Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60). No open security alerts.
+- Open issues: 1 (#49, the 26.4 canary). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
+- **0.5.2 is ready to tag**: main f15e8436 (release PR #64 and the Modrinth body PR #65 merged 7 Nov). The release dry run passed (run 42340370468: build, the full E2E release tier, the Modrinth preflight with both versions free, and the printed upload). Its tested jars are in `C:\Users\Admin\Downloads\rigtune-0.5.2-test` for Charlie's laptop check (docs/release/0.5.2-laptop-check.md). Tag `v0.5.2` at f15e8436 once he reports back.
 - Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
 
 ## Goals (Charlie, 6 Nov)
@@ -27,7 +28,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - RigTune stays under his GitHub name (chaotix345). GitHub CI stays on.
 
 ## Release plan (6 Nov)
-1. **0.5.2, fix batch** (next, ~2-3 worker-days plus a release run; pre-approved as a patch): the 0.5.1 field-test fixes #35-#48 (UI and wording PR #58 and logic PR #60 with rules r22 merged 7 Nov; #46 is the last one, in progress), the #33 evaluator, canary and retention fixes, rules r21+. Same MC versions (26.2, 26.3). Ship once both fix batches merge, main is green and the dry run passes; give Charlie a heads-up and the laptop-check kit first. Target the week of 23 Nov.
+1. **0.5.2, fix batch** (pre-approved as a patch): the 0.5.1 field-test fixes #35-#48 (PRs #58, #60 and #63, all merged 7 Nov), the #33 evaluator, canary and retention fixes, and rules r20-r22. Same MC versions (26.2, 26.3). The fixes, the release PR (#64) and the dry run are done; only the laptop check and the tag remain (see "Where it stands").
 2. **0.6.0, MC 26.4** (needs Charlie's OK) when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (preLaunch history reconcile off the render thread, review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run) and a decision on dropping 26.2.
 
 ## Numbers
@@ -43,6 +44,8 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
+| since 2026-11-07 | 0.5.2 laptop check (~15 min, docs/release/0.5.2-laptop-check.md; jars in `C:\Users\Admin\Downloads\rigtune-0.5.2-test`) | HQ tags v0.5.2 when he reports pass. A failure: logs back to HQ, fix, new dry run. |
+| since 2026-11-07 | Paste docs/modrinth/body.md (PR #65) into the Modrinth listing's description | No token on this PC, so `sync-body` can't run from HQ. About 2 minutes, in his Modrinth project settings. |
 | since 2026-09-28 | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward: needs his OK. Low priority. |
 
 ## Approved by Charlie
@@ -50,6 +53,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - 2026-11-06: HQ merges the weekly rules PRs on its own review (docs/hq.md "Rules updates").
 - 2026-11-06: patch releases (0.5.x) once the dry run passes, with a heads-up to Charlie first. Minor and major releases (0.6.0 on) still need his OK each time, as do Modrinth edits.
 - 2026-11-06: HQ may delete the leftover v0.5 scratch branches and worktrees.
+- 2026-11-07: rewrite the Modrinth description (docs/modrinth/body.md) for 0.5.2 (done in PR #65; Charlie pastes it in).
 - 2026-11-06: RigTune stays under chaotix345; GitHub CI stays on.
 
 ## Waiting on others
@@ -68,9 +72,9 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:6fc90fe3b09e4061f1103461d1a993df4d94627ecb8e4b65d4b614dcc2818b77> | fix/0.5.2-staged-net | staging, launch message and "Discard pending" code and tests (#46), PR body closes #47 | started 7 Nov after PR #60 merged (same worker): #46 option 2 |
+None. The 0.5.2 worker (<t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:6fc90fe3b09e4061f1103461d1a993df4d94627ecb8e4b65d4b614dcc2818b77>; PRs #60, #63, #64, #65) is idle and can take fixes from the laptop check.
 
-#46 (staged changes to the same key, "applied 4 changes" for no net change): HQ chose the worker's option 2 on 7 Nov. Count net changes in the launch toast and hide "Discard pending" when the queue nets to nothing; the staging model, History and Undo stay as documented (audit M1, "2n"). It goes to the same worker as a new task once #60 merges. Then the 0.5.2 release (a pre-approved patch): dry run, a heads-up to Charlie with the laptop-check kit, then tag from HQ.
+Left for later, from PR #63's review (nits): NetChanges counts from the first journal "before", so a file edited to C while the queue ends at A undercounts the launch toast (NetChanges.java:44); PendingNet's `SettingValues.same` ignores case and quotes (PendingNet.java:35). Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
 ## Housekeeping
 - 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). Kept, because they hold commits that aren't on main: remote and local `fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, local `local/v05-battery`. The weekly review checks each against main (`git cherry`, `git diff origin/main...<b>`) before deleting.
@@ -79,6 +83,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Still keep at most two Gradle-building workers at once.
 
 ## Recent changes
+- 2026-11-07 PRs #63, #64, #65 merged: #46 and #47 (net changes only, after a review round); release PR (mod_version 0.5.2, CHANGELOG, laptop check); Modrinth body rewrite (Charlie approved). The release dry run passed (run 42340370468). HQ lost about an hour three times waiting on auto-merges that never woke it; docs/hq.md "Merging" now says how to wait.
 - 2026-11-07 PR #60 merged: the 0.5.2 logic batch (#37 #40 #41 #42 #44 #45 #48, #47 item 3). Rules r22 is live; raw v1 and v2 both show 22. A fresh review caught that r22 would drop the chunk-loading advice when chunk loading isn't measured; the worker fixed it before the merge. #46 (option 2) went to the same worker. The RAM runbook pointer was added to "HQ".
 - 2026-11-07 PR #58 merged: 0.5.2 UI and wording fixes (#35 #36 #38 #39 #43, #47 items 1, 2, 4-8). Logic-batch PR #60 opened. docs/hq.md worker brief: new hard limit, no `rm` in Bash, no force branch delete, no `git restore` (Charlie, via Blindstamp HQ: workers stalled on approval prompts overnight).
 - 2026-11-06 PRs #55, #56, #57: rules r21 live (Krypton/e4mc; stale Fast Noise conflict); the canary's add_mc_version fix and the 26.4 survey (docs/research/v0.6/mc-26.4.md: ~12 agent-hours); STATUS update. Artifact purge finished.
