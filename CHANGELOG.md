@@ -6,6 +6,31 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-07
+
+### Changed
+- **Distant Horizons' auto-updater, in a launcher-managed instance.** Distant Horizons updates itself by default and replaces its own jar behind the launcher's back, which breaks the Modrinth App's list of the instance: its Update all then fails for every mod. Where your launcher keeps the mod list (the Modrinth App, CurseForge, ATLauncher, GDLauncher, or Prism with packwiz), RigTune now suggests "Distant Horizons: Auto Updater: On → Off", so the launcher updates it instead. It's a setting: one click, and History undoes it. Try it doesn't offer to measure it.
+- **Tune keeps your render distance when it missed the target by 5% or less.** A miss that small is within a run's noise (in testing, the confirmation run alone moved by more), so Tune no longer suggests going one chunk lower for it, and the result says why: "Render distance 12 missed the target by 5% or less (1% lows 165 FPS), which is within a run's noise, so RigTune doesn't suggest lowering it." A clear miss still lowers it.
+- Rules updates you got without updating RigTune:
+  - Revision 20: Krypton and Particle Core are offered on 26.3 now that they have 26.3 builds; the Fabulously Optimized and Additive mod lists are refreshed.
+  - Revision 21: Krypton is no longer offered alongside e4mc (which ships in Fabulously Optimized and Additive): Krypton's current jars stop singleplayer worlds from opening when both are installed, and with both, RigTune says to keep one. The old warning about Krypton with Fast Noise or Material Rule Compiler is gone; they work together.
+  - Revision 22: the Distant Horizons auto-updater suggestion above (RigTune 0.5.2 and later); the Stutter Doctor's chunk-loading advice below; and the 12-chunk render distance suggestion's reason no longer argues for raising it when it lowers yours.
+
+### Fixed
+- **Switching profiles back and forth no longer reads as changes.** Max FPS → Quality → My settings before a restart ended every setting where it started, yet the next start said "RigTune applied 4 change(s)", and **Discard pending** stayed for a queue that changes nothing. The count is now the settings that actually changed (none there, so no message), and Discard pending, Apply's "Restart Minecraft to finish applying…" line and Try it's "Other changes are waiting for a restart" show only while the restart would change something. History still lists each switch.
+- **A profile's own settings aren't undone by the next Apply.** After switching to Max FPS (uncapped), the RigTune screen offered, ticked, to cap the frame rate again. While a profile is on, a suggestion that would undo one of its settings starts unticked: "Your Max FPS profile sets this on purpose, so it starts unticked; switch to My settings for RigTune's usual suggestions." Every profile works this way except My settings.
+- **No suggestions from a benchmark's temporary settings.** After a Tune in the benchmark world, the RigTune screen could offer "Max Framerate: 260 → 170" and a render distance change, built from the run's uncapped settings, although your own were already restored. RigTune now waits for the run to put your settings back before it lists suggestions.
+- **Try it with Distant Horizons generating terrain** gave "No verdict … Try it again for a verdict" every time. It now says what helps: "Let Distant Horizons finish generating first (its Show Generation Progress option shows when it's done), then try it again." A try that needs a restart and stopped before changing anything says the same.
+- **Stutter Doctor, "Hitches while chunks were loading"**: it no longer suggests Sodium's Chunk Updates set to Deferred when they already are; that suggestion is now its own advice, shown only while Chunk Updates is Immediate or Soon. The chunk-loading advice also says when to expect a fix to try: "RigTune offers a fix to try only when it could measure what loading chunks cost ("Stutter while loading chunks"); otherwise lower the render distance yourself and compare sessions." In singleplayer on fast PCs it usually can't measure that, so this is the advice you'll see.
+- Stutter Doctor wording: shares read "59%" and never wrap the sign onto a line of its own, a small but non-zero share reads "<1%" instead of "0%", sessions where garbage collection was the top cause but only normal short pauses say that more memory wouldn't remove them, an empty session's Copy summary says "No frames recorded yet", and "GC timing not calibrated" now reads "Garbage collection can't be timed yet".
+- **RigTune screen header**: on wide screens with room for it, the hardware tier badge gets its own line instead of being cut off; where it's still cut off, its tooltip wraps instead of running off the screen.
+- **The RigTune button in Sodium's Video Settings** no longer covers Sodium's page list: it sits above Sodium's Undo / Apply / Done buttons (in the old corner only when the window is too narrow), and moves there once Sodium's donation prompt is closed.
+- **Benchmark result, Distant Horizons note**: a Measure before/after pair's "Distant Horizons was generating terrain" note is never cut short, says which run it was ("during the before run", "this run", "both runs"), and says what to do: "Let it finish generating first, then Measure before again." The same note isn't repeated under each run.
+- **Modrinth App repair steps** name RigTune's newer copy next to each old copy ("old.jar.disabled (RigTune's newer copy: new.jar)"), and say that the version Content lists is RigTune's newer one. Copy steps copies the same.
+- Previews of a profile switch, a profile import or a Stutter Doctor fix no longer show the "Mod files" section: none of them changes mods.
+- With Network access off, the greyed Rules updates and Modrinth switches read "ON (network off)" instead of a plain "ON".
+- "Try It" is spelled "Try it" everywhere.
+
 ## [0.5.1] - 2026-09-29
 
 ### Fixed
