@@ -19,7 +19,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
 - Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). Purge done 6 Nov: 253 left (4 release-files from Sep, 249 expiring within 7 days), from 8,863 (~138 GB).
 - Open issues: 1 (#49, the 26.4 canary). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
-- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. A rules fix (r23) is with the worker.
+- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. It's logged as issue #68, not being worked on (Charlie, 7 Nov: save weekly usage).
 - Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
 
 ## Goals (Charlie, 6 Nov)
@@ -70,7 +70,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:6fc90fe3b09e4061f1103461d1a993df4d94627ecb8e4b65d4b614dcc2818b77> | fix/rules-rd-reason-dh | rules/source/knowledge.json and the generated rules, the recommender's reason joining if needed, scenario tests | started 7 Nov: render distance reasons that argue against the change (tier 5 + Distant Horizons), rules r23 if it's text only |
+None. Charlie (7 Nov) is saving weekly usage for other projects: start no workers until he says so. Keep HQ runs short; the scheduled jobs check and report, and don't start workers.
 
 Left for later, from PR #63's review (nits): NetChanges counts from the first journal "before", so a file edited to C while the queue ends at A undercounts the launch toast (NetChanges.java:44); PendingNet's `SettingValues.same` ignores case and quotes (PendingNet.java:35). Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
