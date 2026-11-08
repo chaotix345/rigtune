@@ -1,6 +1,6 @@
 # Status
 
-HQ owns this file and rewrites it (not appends). Workers report to HQ instead of editing it. Last updated: 2026-11-08 by RigTune HQ.
+HQ owns this file and rewrites it (not appends). Workers report to HQ instead of editing it. Last updated: 2026-11-09 by RigTune HQ.
 
 ## HQ
 - Thread: <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0> (pinned, "RigTune HQ", since 8 Nov). Thread id: `mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0` (workers `t3_thread_send` here). Project id: `951159fe-96cd-4205-939b-630793975b28`. Worktree: `C:\Users\Admin\.t3\worktrees\rigtune\chore-hq-20261108-1100` (HQ marker in its git dir, `C:\Dev\rigtune\.git\worktrees\chore-hq-20261108-1100\rigtune-hq`). The previous HQ (<t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:1a6f4b05932c9083d4ba76e4ee9cf8df5f6b97d3b474dec8790b8c3b8db68746>, 6-8 Nov) is retired; its marker is deleted.
@@ -72,15 +72,24 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 |---|---|---|---|
 None. Charlie (7 Nov) is saving weekly usage for other projects: start no workers until he says so. Keep HQ runs short; the scheduled jobs check and report, and don't start workers.
 
-Left for later, from PR #63's review (nits): NetChanges counts from the first journal "before", so a file edited to C while the queue ends at A undercounts the launch toast (NetChanges.java:44); PendingNet's `SettingValues.same` ignores case and quotes (PendingNet.java:35). Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
+Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
+
+## Backlog
+Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill "Backlog and leftover quota"; Claude resets Mon ~08:00 Sydney, so Sunday is the burn day). Nothing under `rules/` (live on merge), nothing that publishes or releases; code fixes reach users only in a later release.
+- PR #63 review nits, with failing-first tests: NetChanges counts from the first journal "before", so a file edited to C while the queue ends at A undercounts the launch toast (`NetChanges.java:44`); PendingNet's `SettingValues.same` ignores case and quotes (`PendingNet.java:35`).
+- `FrameHookBudgetTest` fails when the PC is low on memory: make it reliable without loosening the ceilings (STATUS "Approved by Charlie", 27 Sep).
+- review-12/13 lows (`docs/reviews/review-12.md`, `review-13.md`: R12FEAT-2..9, R12X-4/5, R12APPLY-4, R12REL-3/5/6, R12STUTTER-4/5/7, R13-2): triage which still apply on main and fix a few small ones per PR, one area at a time.
+- Leftover v0.5 branches (`fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, `local/v05-battery`): compare each with main (`git cherry`, `git diff origin/main...<b>`) and report what isn't on main, with a keep or delete call. Report only; HQ deletes.
+- Docs drift: check `CONTRIBUTING.md`, `docs/DESIGN.md` and `tools/MC_VERSIONS.md` against the current build and code, and fix what's stale (docs PR).
 
 ## Housekeeping
 - 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). Kept, because they hold commits that aren't on main: remote and local `fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, local `local/v05-battery`. The weekly review checks each against main (`git cherry`, `git diff origin/main...<b>`) before deleting.
 - Local unmerged branches can't be deleted from a thread (a user hook blocks `git branch -D`); they cost nothing, so they stay.
 - Old worktrees `C:\Dev\Worktrees\rigtune-audit-verify` and `rigtune-realworld`: their branches are merged, but both have uncommitted files (AuditVerify*/RealWorld* tests; an edited ApplyExecutor.java) and broken links to the repo's old folder ("C:/Dev/Minecraft Setting Optimisation Mod"). Kept; don't delete without saving those files first.
-- This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Still keep at most two Gradle-building workers at once.
+- This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-09 hq skill update applied (Charlie, 8 Nov): every local Gradle gate runs through the shared gate queue as a background command; up to 4 workers, none started under 4 GB free RAM; worker briefs get the Approach and Shipping lines and short in-game screenshot and mock lines; the daily and weekly jobs gain backlog steps (both live tasks updated); "Backlog" section added. GitHub CI unchanged.
 - 2026-11-08 HQ handed over to a new thread. New jobs created and bound to it; the old thread's two jobs deleted; release-guard marker moved.
 - 2026-11-07 **0.5.2 released** (tag v0.5.2 at f15e8436, run 42343609374; Modrinth nFIvBLPX and hhiDEjf1). Charlie's check on his desktop passed all 9 steps. He pasted the new Modrinth description. Ops PR #66 was the first merge HQ waited on with a background poll.
 - 2026-11-07 PRs #63, #64, #65 merged: #46 and #47 (net changes only, after a review round); release PR (mod_version 0.5.2, CHANGELOG, laptop check); Modrinth body rewrite (Charlie approved). The release dry run passed (run 42340370468). HQ lost about an hour three times waiting on auto-merges that never woke it; docs/hq.md "Merging" now says how to wait.
