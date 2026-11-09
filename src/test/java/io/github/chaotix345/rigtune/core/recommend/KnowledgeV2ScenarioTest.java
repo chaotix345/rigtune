@@ -429,6 +429,73 @@ class KnowledgeV2ScenarioTest {
 		}
 	}
 
+	private static final String DH_TWELVE = "Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware: "
+			+ "more cost frame rate without adding much view distance.";
+
+	// #68: tier 5 (the 0.5.2 check's rig) with Distant Horizons at render distance 16 lowers it to 12 without the tier-5
+	// reason, which argued for 16; from below it raises to 12 with the same reason. With Distant Horizons' renderer off, the
+	// tier-5 reason stays (no longer "the benchmark can push it further", which argued for more when lowering 32 to 16).
+	@Test
+	void tier5DistantHorizonsRenderDistanceReasonFitsTwelve() {
+		for (String current : List.of("16", "8")) {
+			Recommendation rec = run(Fixtures.userRig(), DH_MODS, with(DH_DEFAULTS, "vanilla.renderDistance", current, RENDERER, "DEFAULT"))
+					.get("set:vanilla.renderDistance");
+			assertNotNull(rec, current);
+			assertEquals("12", ((Action.SetSetting) rec.action()).newValue(), current);
+			assertEquals(DH_TWELVE, rec.reason(), current);
+			assertEquals(Impact.MEDIUM, rec.impact(), current);
+			assertFalse(rec.selectedByDefault(), current);
+		}
+		Recommendation off = run(Fixtures.userRig(), DH_MODS, with(DH_DEFAULTS, "vanilla.renderDistance", "12", RENDERER, "DISABLED"))
+				.get("set:vanilla.renderDistance");
+		assertEquals("Your hardware is strong enough for 16 chunks as a starting point; the benchmark can fine-tune it.", off.reason());
+	}
+
+	// #68: tier 3 only through the Quality goal on a 2 GB heap (the launcher default); the memory cap's 8 gets its own reason.
+	@Test
+	void tier3TwoGbRenderDistanceReasonFitsEight() {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.heapMb = 2048;
+		Recommendation rec = Recommender.recommend(RulesLoader.loadBundled(), hw.build(), Fixtures.mods("sodium"),
+				new SettingsSnapshot(Map.of("vanilla.renderDistance", "12")), OnlineData.offline(), Goal.QUALITY)
+				.recommendations().stream().filter(r -> r.id().equals("set:vanilla.renderDistance")).findFirst().orElseThrow();
+		assertEquals("8", ((Action.SetSetting) rec.action()).newValue());
+		assertEquals("With 2 GB or less of memory for Minecraft, 8 chunks is the most that fits in memory without stutter.", rec.reason());
+		assertEquals(Impact.HIGH, rec.impact());
+		assertTrue(rec.selectedByDefault());
+	}
+
+	// #68: across tiers, goals, heaps and Distant Horizons, a render distance reason never names more chunks than the target
+	// or says the benchmark can push it further while lowering it.
+	@Test
+	void renderDistanceReasonNeverArguesForMoreThanTheTarget() {
+		java.util.regex.Pattern chunks = java.util.regex.Pattern.compile("(\\d+) (?:vanilla )?chunks");
+		for (Fixtures.Hw base : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), tier3Rig())) {
+			for (long heap : List.of(1024L, 2048L, 3072L, 4096L, 6144L)) {
+				for (Goal goal : Goal.values()) {
+					for (List<String> mods : List.of(List.of("sodium"), DH_MODS)) {
+						for (String current : List.of("2", "8", "12", "16", "32")) {
+							base.heapMb = heap;
+							Recommendation rec = Recommender.recommend(RulesLoader.loadBundled(), base.build(), Fixtures.mods(mods.toArray(String[]::new)),
+									new SettingsSnapshot(with(DH_DEFAULTS, "vanilla.renderDistance", current, RENDERER, "DEFAULT")), OnlineData.offline(), goal)
+									.recommendations().stream().filter(r -> r.id().equals("set:vanilla.renderDistance")).findFirst().orElse(null);
+							if (rec == null) {
+								continue;
+							}
+							int target = Integer.parseInt(((Action.SetSetting) rec.action()).newValue());
+							String where = heap + " MB, " + goal + ", " + mods + ", " + current + " -> " + target + ": " + rec.reason();
+							java.util.regex.Matcher m = chunks.matcher(rec.reason());
+							while (m.find()) {
+								assertTrue(Integer.parseInt(m.group(1)) <= target, where);
+							}
+							assertFalse(target < Integer.parseInt(current) && rec.reason().contains("push it further"), where);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Phase 5 finding 10: with Chunky, Distant Horizons wants at least as many threads as C2ME and warns about too few.
 	@Test
 	void dhThreadsAreNotCappedWithChunky() {

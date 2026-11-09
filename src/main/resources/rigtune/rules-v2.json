@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 22,
-  "generatedAt": "2026-11-06T17:04:53Z",
+  "revision": 23,
+  "generatedAt": "2026-11-09T05:34:22Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1091,7 +1091,36 @@
       },
       "impact": "medium",
       "defaultSelected": false,
-      "reason": "Your hardware is strong enough for 16 chunks as a starting point; the benchmark can push it further."
+      "reason": "Your hardware is strong enough for 16 chunks as a starting point; the benchmark can fine-tune it."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "value": 8,
+      "when": {
+        "tierAtLeast": 3,
+        "tierAtMost": 3,
+        "heapMbAtMost": 2100
+      },
+      "impact": "high",
+      "reason": "With 2 GB or less of memory for Minecraft, 8 chunks is the most that fits in memory without stutter."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "value": 12,
+      "when": {
+        "tierAtLeast": 5,
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "not": {
+          "settingIs": {
+            "dh.client.advanced.debugging.rendererMode": "DISABLED"
+          }
+        }
+      },
+      "impact": "medium",
+      "defaultSelected": false,
+      "reason": "Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware: more cost frame rate without adding much view distance."
     },
     {
       "key": "vanilla.renderDistance",

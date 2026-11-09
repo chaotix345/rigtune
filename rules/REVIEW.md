@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 - New upstream mods to triage: 6
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 1
-- Rules changed or omitted in rules-v1.json: 50
+- Rules changed or omitted in rules-v1.json: 51
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 | slug | title | pack(s) | optimization category |
@@ -43,25 +43,26 @@ None found.
 | mods[renderscale] | v1 override: reason, recommendWhen |
 | mods[lambdynamiclights] | omitted ("v1": false) |
 | mods[distanthorizons] | omitted ("v1": false) |
-| settings[8] vanilla.renderDistance | v1 override: when |
-| settings[9] vanilla.renderDistance | v1 override: when |
-| settings[40] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
-| settings[41] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
+| settings[6] vanilla.renderDistance | v1 override: when |
+| settings[10] vanilla.renderDistance | v1 override: when |
+| settings[11] vanilla.renderDistance | v1 override: when |
 | settings[42] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
 | settings[43] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
 | settings[44] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
-| settings[45] dh.client.advanced.graphics.quality.verticalQuality | omitted ("v1": false) |
-| settings[46] dh.client.advanced.graphics.quality.horizontalQuality | omitted ("v1": false) |
-| settings[47] dh.client.advanced.graphics.quality.horizontalQuality | omitted ("v1": false) |
-| settings[48] dh.client.advanced.graphics.quality.maxHorizontalResolution | omitted ("v1": false) |
-| settings[49] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[50] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
+| settings[45] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
+| settings[46] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
+| settings[47] dh.client.advanced.graphics.quality.verticalQuality | omitted ("v1": false) |
+| settings[48] dh.client.advanced.graphics.quality.horizontalQuality | omitted ("v1": false) |
+| settings[49] dh.client.advanced.graphics.quality.horizontalQuality | omitted ("v1": false) |
+| settings[50] dh.client.advanced.graphics.quality.maxHorizontalResolution | omitted ("v1": false) |
 | settings[51] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
 | settings[52] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[53] dh.client.advanced.autoUpdater.enableAutoUpdater | omitted ("v1": false) |
-| settings[54] iris.maxShadowRenderDistance | omitted ("v1": false) |
-| settings[55] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[53] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
+| settings[54] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
+| settings[55] dh.client.advanced.autoUpdater.enableAutoUpdater | omitted ("v1": false) |
 | settings[56] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[57] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[58] iris.maxShadowRenderDistance | omitted ("v1": false) |
 | advice[ram-distant-horizons] | v1 override: when |
 | advice[ram-shaders] | v1 override: when |
 | advice[ram-distant-horizons-shaders-limited] | omitted ("v1": false) |

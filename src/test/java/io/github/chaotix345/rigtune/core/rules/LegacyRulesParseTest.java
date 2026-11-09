@@ -35,6 +35,12 @@ class LegacyRulesParseTest {
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of(OldClientWarningTest.ID);
 	// 0.5.2 (#37): a setting entry older clients read but never fire (its launcher-mods flag is UNKNOWN to them).
 	static final List<String> SETTINGS_ADDED_SINCE_R16 = List.of("dh.client.advanced.autoUpdater.enableAutoUpdater");
+	// r23 (#68): render distance value entries that set what a cap would, with their own reason (older clients read them
+	// like any value entry; the value is the one the cap gave before).
+	static final List<String> RENDER_DISTANCE_REASONS_ADDED_IN_R23 = List.of(
+			"With 2 GB or less of memory for Minecraft, 8 chunks is the most that fits in memory without stutter.",
+			"Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware: "
+					+ "more cost frame rate without adding much view distance.");
 	// #24: the GPU rows added since r16 (0.2.0-0.4.0 read them like any other row; rules-v1 leaves them out).
 	static final List<String> GPU_TIERS_ADDED_SINCE_R16 = List.of("(?i)Arc(?:\\s*\\(TM\\))?\\s*\\d{3}T\\b");
 	static final String R16 = "/rules/r16/rules-v2.json";
@@ -99,8 +105,9 @@ class LegacyRulesParseTest {
 		var r = legacy(bundledJson());
 		var r16 = legacy(resource(R16));
 		assertEquals(r16.settings.stream().map(s -> s.key).toList(),
-				r.settings.stream().map(s -> s.key).filter(k -> !SETTINGS_ADDED_SINCE_R16.contains(k)).toList());
-		assertEquals(r16.settings.size() + SETTINGS_ADDED_SINCE_R16.size(), r.settings.size());
+				r.settings.stream().filter(s -> !RENDER_DISTANCE_REASONS_ADDED_IN_R23.contains(s.reason)).map(s -> s.key)
+						.filter(k -> !SETTINGS_ADDED_SINCE_R16.contains(k)).toList());
+		assertEquals(r16.settings.size() + SETTINGS_ADDED_SINCE_R16.size() + RENDER_DISTANCE_REASONS_ADDED_IN_R23.size(), r.settings.size());
 		List<String> advice = new java.util.ArrayList<>(r16.advice.stream().map(a -> a.id).toList());
 		advice.addAll(ADVICE_ADDED_SINCE_R16);
 		assertEquals(advice, r.advice.stream().map(a -> a.id).toList());

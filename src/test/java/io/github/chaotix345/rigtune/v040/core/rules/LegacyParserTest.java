@@ -30,6 +30,12 @@ class LegacyParserTest {
 	// (The same list as LegacyRulesParseTest's.)
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of("old-client-launcher-mods");
 	static final List<String> SETTINGS_ADDED_SINCE_R16 = List.of("dh.client.advanced.autoUpdater.enableAutoUpdater");
+	// r23 (#68): render distance value entries that set what a cap would, with their own reason (older clients read them
+	// like any value entry; the value is the one the cap gave before).
+	static final List<String> RENDER_DISTANCE_REASONS_ADDED_IN_R23 = List.of(
+			"With 2 GB or less of memory for Minecraft, 8 chunks is the most that fits in memory without stutter.",
+			"Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware: "
+					+ "more cost frame rate without adding much view distance.");
 	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag", "stutter-chunks-loading-tag-sodium");
 
 	private static String bundled() throws IOException {
@@ -116,8 +122,9 @@ class LegacyParserTest {
 		RulesDocument r = parse040(bundled());
 		RulesDocument r16 = parse040(r16());
 		assertEquals(r16.settings.stream().map(s -> s.key).toList(),
-				r.settings.stream().map(s -> s.key).filter(k -> !SETTINGS_ADDED_SINCE_R16.contains(k)).toList());
-		assertEquals(r16.settings.size() + SETTINGS_ADDED_SINCE_R16.size(), r.settings.size());
+				r.settings.stream().filter(s -> !RENDER_DISTANCE_REASONS_ADDED_IN_R23.contains(s.reason)).map(s -> s.key)
+						.filter(k -> !SETTINGS_ADDED_SINCE_R16.contains(k)).toList());
+		assertEquals(r16.settings.size() + SETTINGS_ADDED_SINCE_R16.size() + RENDER_DISTANCE_REASONS_ADDED_IN_R23.size(), r.settings.size());
 		assertEquals(plus(r16.advice.stream().map(a -> a.id).toList(), ADVICE_ADDED_SINCE_R16), r.advice.stream().map(a -> a.id).toList());
 		assertNotNull(r.stutterAdvice);
 		assertEquals(plus(r16.stutterAdvice.stream().map(a -> a.id).toList(), STUTTER_ADVICE_ADDED_SINCE_R16),
