@@ -11,15 +11,14 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## Where it stands
 - Released: **0.5.2** (7 Nov 2026) for MC 26.2 and 26.3: tag v0.5.2 at f15e8436, release run 42343609374. GitHub release https://github.com/chaotix345/rigtune/releases/tag/v0.5.2 has the main and sources jars for both versions. Modrinth has 0.5.2+mc26.2 (nFIvBLPX) and +mc26.3 (hhiDEjf1); release.yml's verify step matched each sha512, the CDN file, version number, game version, loader and type. Before that: 0.5.1 (29 Sep; Modrinth 5Zq8LVfK, FqlSEw70). Charlie ran the 0.5.2 check on his desktop (RX 7800 XT, 180 Hz, Modrinth App): all 9 steps passed. The Modrinth description is the 0.5.2 rewrite (PR #65; Charlie pasted it 7 Nov). **The Modrinth project is still "Under review"**: Charlie's dashboard (6 Nov) says it is in the moderation queue, with no moderator message ("we aim to review within a week, but some projects may face delays"). The public API returns 404 until it's approved. Submitted around 25 Sep.
-- Rules: **r22 live on main** (7 Nov, PR #60; raw rules-v1.json and rules-v2.json both return revision 22). r22 adds three things:
+- Rules: **r23 live on main** (9 Nov, PR #73; raw rules-v1.json and rules-v2.json both return revision 23). r23 fixes #68: when Distant Horizons is rendering on tier 5, render distance gets its own 12-chunk entry ("Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware; going past 12 costs frame rate…"). Tier 3 on a heap of 2 GB or less gets its own 8-chunk entry, so the tier reason no longer argues against the cap. The tier-5 reason now ends "the benchmark can fine-tune it". Values, impact and default ticks are unchanged: Opus and Codex reviews checked this, and a new r22-equivalence test now enforces it. Left as is: `ServerCap` can still append "The server sends at most N chunks." after a sentence naming more chunks (code-only, not a regression). r22 (7 Nov, PR #60) added three things:
   - turning off Distant Horizons' auto-updater where a launcher manages the mods (new `launcher-mods` flag, so 0.5.2+ only);
   - the chunk-loading stutter advice split: a general entry as in r21, plus a separate Sodium Chunk Updates entry only when that setting isn't Deferred;
   - the reworded tier-4 render distance reason.
   r21 (6 Nov, PR #55): Krypton conflicts with e4mc (its 0.3.x jars break joining singleplayer worlds with e4mc, which Fabulously Optimized and Additive ship); the unsupported Krypton vs Fast Noise / Material Rule Compiler conflict is gone from v2 (0.1.x keeps it via v1 overrides). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 makes it push the branch and leave the PR to HQ.
 - CI on main green all week (6 of 6 runs). Rules bot: no run under PR #52's fix yet. GitHub has started its 03:00 UTC Monday cron 5-7.5 h late every week (08:27-10:29 UTC, about 19:30-21:30 Sydney), so the 16:00 weekly review finds no branch and the next daily opens the PR. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
 - Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). 9 Nov: 1,250 (about 20 GB, from the 6-7 Nov CI burst), 1,244 of them expiring 13-15 Nov; 4 release-files from Sep expire 26-28 Dec. HQ deleted 22 (408 MB) with GitHub's 90-day default: a 6 Nov push run on `fix/0.5.2-ui-wording`, a branch cut before PR #52. Every workflow on main sets retention.
-- Open issues: 2 (#49, the 26.4 canary; #68, below). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
-- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. It's logged as issue #68; a worker started on it 9 Nov ("Active work"). The text is in `rules/source/knowledge.json`, so a fix goes live on merge with no release.
+- Open issues: 1 (#49, the 26.4 canary). Closed 9 Nov: #68 (PR #73). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
 - Ecosystem (9 Nov): no MC 26.4 release or pre-release (still 26.4-snapshot-7, 3 Nov; no snapshot this week). Sodium and Iris have no 26.4 builds; Sodium and Sodium Extra put out 26.3 betas this week (the rules bot picks up availability). Fabric API 0.165.4+26.4 is beta, for snapshot-7; C2ME and Moonrise have 26.4 snapshot alphas. Fabric Loader 0.20.1 has been stable since 19 Oct; RigTune builds on 0.19.5 and needs `>=0.19.5`, so players on 0.20.x run it on a loader CI doesn't test (Backlog). 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep). Not ready to port: 0.6.0 waits for the 26.4 release and Sodium/Iris.
 
 ## Goals (Charlie, 6 Nov)
@@ -67,7 +66,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
 
 ## Dated reminders
-- 2026-11-10: the first rules bot run under PR #52's fix should have landed on the evening of 9 Nov. Check that it succeeded with a "HQ opens the PR" notice, then open, review and merge its PR (docs/hq.md "Rules updates"). If it failed, read the log before anything else.
+- 2026-11-10: the first rules bot run under PR #52's fix should have landed on the evening of 9 Nov. Check that it succeeded with a "HQ opens the PR" notice, then open, review and merge its PR (docs/hq.md "Rules updates"). If it failed, read the log before anything else. If the bot ran before PR #73 merged, its branch also claims r23: regenerate it on top of main (r24) before merging.
 - 2026-11-11: snapshot canary (Wed 05:00 UTC, 16:00 Sydney): it must build the newest 26.4 snapshot, not skip. It is expected to fail on the real 26.4 breaks and comment on #49.
 - 2026-11-16: billing and artifacts check, after the 6-7 Nov CI burst expires (13-15 Nov): the artifact count should be back near the low hundreds and November's storage should be growing slowly.
 - 2026-11-16 (then weekly): Krypton's stale jars (astei/krypton #169). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
@@ -79,9 +78,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:b9292fb7-9c4a-465b-a04c-4ada069bdb01> | `fix/68-rd-reason` | `rules/source/knowledge.json`, generated rules files, recommender if needed, tests | started 9 Nov ~17:00; reports to HQ |
-
-Workers are on again (Charlie, 9 Nov). The earlier untested #68 attempt stays in worktree `fix-0.5.2-logic` (branch `fix/rules-rd-reason-dh`) until #68's PR merges; then remove that worktree.
+None. Workers are on (Charlie, 9 Nov); HQ starts them as needed.
 
 Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
@@ -101,6 +98,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-09 PR #73 merged: **rules r23 live** (#68 render distance reason; raw v1 and v2 show 23). Reviewed by Opus and by Codex gpt-6.1-sol (high); both approved. A wording nit and an r22-equivalence test were added before the merge. The worker thread is settled, and both #68 worktrees are removed.
 - 2026-11-09 Charlie handed HQ the internal decisions ("Approved by Charlie"). Workers back on; #68 worker started. Backlog burns run on Sundays.
 - 2026-11-09 weekly review: numbers, ecosystem and Backlog (Fabric Loader item added). Housekeeping: deleted 22 stale 90-day artifacts (408 MB), removed the old HQ worktree `chore-rigtune-hq-setup`, deleted 19 local branches whose remotes were merged and gone, and settled the old HQ's two review subagent threads. docs/hq.md: the rules bot's real start time.
 - 2026-11-09 hq skill update applied (Charlie, 8 Nov): every local Gradle gate runs through the shared gate queue as a background command; up to 4 workers, none started under 4 GB free RAM; worker briefs get the Approach and Shipping lines and short in-game screenshot and mock lines; the daily and weekly jobs gain backlog steps (both live tasks updated); "Backlog" section added. GitHub CI unchanged.
