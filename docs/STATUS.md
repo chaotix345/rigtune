@@ -4,7 +4,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## HQ
 - Thread: <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0> (pinned, "RigTune HQ", since 8 Nov). Thread id: `mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0` (workers `t3_thread_send` here). Project id: `951159fe-96cd-4205-939b-630793975b28`. Worktree: `C:\Users\Admin\.t3\worktrees\rigtune\chore-hq-20261108-1100` (HQ marker in its git dir, `C:\Dev\rigtune\.git\worktrees\chore-hq-20261108-1100\rigtune-hq`). The previous HQ (<t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:1a6f4b05932c9083d4ba76e4ee9cf8df5f6b97d3b474dec8790b8c3b8db68746>, 6-8 Nov) is retired; its marker is deleted.
-- Jobs: daily `scheduled-task:902945c8-9117-4c26-b531-3ad79fdfcc87` (11:00, next 9 Nov 11:00); weekly `scheduled-task:d8d1822d-1aa2-47e7-9128-9d62a20a6d98` (Mon 16:00, next 9 Nov 16:00).
+- Jobs: daily `scheduled-task:902945c8-9117-4c26-b531-3ad79fdfcc87` (11:00, next 10 Nov 11:00); weekly `scheduled-task:d8d1822d-1aa2-47e7-9128-9d62a20a6d98` (Mon 16:00, next 16 Nov 16:00).
 - Secrets: none on this PC. `MODRINTH_TOKEN` is a GitHub Actions secret only (release.yml). HQ has no Modrinth access, so moderation status, messages, comments and reports aren't visible to it.
 - Low RAM on this PC: follow `C:\Users\Admin\Documents\ram-watch\README.md`. Check first with `powershell -ExecutionPolicy Bypass -File C:\Users\Admin\Documents\perfinfo.ps1`: kernel paged pool over 4 GB or nonpaged pool over 2 GB means a kernel leak, and Charlie's restart fixes it. Otherwise stop dev servers you don't need. Never kill the hidden session-0 Python processes. Ask Charlie before uninstalling anything or stopping services. (Charlie, 7 Nov: the 6-7 Nov shortage was an Acronis driver leaking kernel memory, now uninstalled.)
 - No earlier coordinator threads or scheduled tasks exist in T3: v0.1-v0.5.1 ran as Claude Code CLI sessions (docs/PROGRESS.md, now history).
@@ -16,11 +16,11 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
   - the chunk-loading stutter advice split: a general entry as in r21, plus a separate Sodium Chunk Updates entry only when that setting isn't Deferred;
   - the reworded tier-4 render distance reason.
   r21 (6 Nov, PR #55): Krypton conflicts with e4mc (its 0.3.x jars break joining singleplayer worlds with e4mc, which Fabulously Optimized and Additive ship); the unsupported Krypton vs Fast Noise / Material Rule Compiler conflict is gone from v2 (0.1.x keeps it via v1 overrides). The Monday rules bot had failed every week since 5 Oct (Actions may not create PRs; that setting stays off); PR #52 makes it push the branch and leave the PR to HQ.
-- CI on main green. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
-- Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). Purge done 6 Nov: 253 left (4 release-files from Sep, 249 expiring within 7 days), from 8,863 (~138 GB).
-- Open issues: 1 (#49, the 26.4 canary). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
-- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. It's logged as issue #68, not being worked on (Charlie, 7 Nov: save weekly usage).
-- Ecosystem (6 Nov): no MC 26.4 release or pre-release yet (26.4-snapshot-7 on 3 Nov); Sodium and Iris have no 26.4 builds; Fabric API is beta-only for 26.4; Mod Menu alpha. 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep).
+- CI on main green all week (6 of 6 runs). Rules bot: no run under PR #52's fix yet. GitHub has started its 03:00 UTC Monday cron 5-7.5 h late every week (08:27-10:29 UTC, about 19:30-21:30 Sydney), so the 16:00 weekly review finds no branch and the next daily opens the PR. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
+- Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). 9 Nov: 1,250 (about 20 GB, from the 6-7 Nov CI burst), 1,244 of them expiring 13-15 Nov; 4 release-files from Sep expire 26-28 Dec. HQ deleted 22 (408 MB) with GitHub's 90-day default: a 6 Nov push run on `fix/0.5.2-ui-wording`, a branch cut before PR #52. Every workflow on main sets retention.
+- Open issues: 2 (#49, the 26.4 canary; #68, below). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
+- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. It's logged as issue #68, not being worked on (Charlie, 7 Nov: save weekly usage). The text is in `rules/source/knowledge.json`, so a fix goes live on merge with no release. An unfinished, uncommitted start (two new render-distance entries in knowledge.json, not regenerated or tested) sits in worktree `C:\Users\Admin\.t3\worktrees\rigtune\fix-0.5.2-logic` on branch `fix/rules-rd-reason-dh`: keep it for whoever takes #68.
+- Ecosystem (9 Nov): no MC 26.4 release or pre-release (still 26.4-snapshot-7, 3 Nov; no snapshot this week). Sodium and Iris have no 26.4 builds; Sodium and Sodium Extra put out 26.3 betas this week (the rules bot picks up availability). Fabric API 0.165.4+26.4 is beta, for snapshot-7; C2ME and Moonrise have 26.4 snapshot alphas. Fabric Loader 0.20.1 has been stable since 19 Oct; RigTune builds on 0.19.5 and needs `>=0.19.5`, so players on 0.20.x run it on a loader CI doesn't test (Backlog). 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep). Not ready to port: 0.6.0 waits for the 26.4 release and Sodium/Iris.
 
 ## Goals (Charlie, 6 Nov)
 - RigTune is a portfolio piece with steady downloads; getting the Modrinth listing public comes first. No deadline given.
@@ -40,6 +40,14 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 | 2026-11-06 | Traffic (14 days) | 12 views (7 unique), 20 clones (12 unique); referrer Google 3 views |
 | 2026-11-06 | Issues | 16 open; 0 closed since 29 Sep |
 | 2026-11-06 | Billing (Actions storage, gross, all discounted to $0 net) | Sep US$3.40 (`nemesis-mod`), Oct US$31.89 (`rigtune`, 94,900 GB-hours), Nov to date US$5.61 (`nemesis-mod`). No paid minutes. |
+| 2026-11-09 | Modrinth oBN6pcGa | Not public yet (API 404); still under review |
+| 2026-11-09 | GitHub release downloads (main jars, 26.2 + 26.3; change since 6 Nov) | 0.1.0: 455 (+1); 0.2.0: 449 + 73 (+1, +1); 0.3.0: 308 + 73 (+2, +2); 0.4.0: 130 + 124 (+2, +2); 0.5.0: 5 + 5 (+2, +2); 0.5.1: 4 + 4 (+2, +2); 0.5.2: 2 + 3 (new). Mostly CI E2E downloads. |
+| 2026-11-09 | GitHub repo | 0 stars, 0 forks, 0 watchers (no change) |
+| 2026-11-09 | Traffic, daily (views/unique) | 27 Oct 1/1; 31 Oct 6/3; 4 Nov 2/1; 6 Nov 1/1; other days 0. 14-day total 10 views (6 unique), down from 12 (7). Referrers: Google 1, github.com 1. |
+| 2026-11-09 | Clones, daily (count/unique) | 26 Oct 3/3; 27-28 Oct 1/1 each; 1 Nov 1/1; 2 Nov 2/2; 4 Nov 5/3; 6 Nov 649/45; 7 Nov 477/51 (the 0.5.2 CI and workers). 14-day total 1,139 (97 unique). |
+| 2026-11-09 | Issues (week from 2 Nov) | 1 opened (#68), 15 closed; 2 open |
+| 2026-11-09 | Artifacts | 1,250 (~20 GB, mostly expiring 13-15 Nov), up from 253 after the purge |
+| 2026-11-09 | Billing, Nov to date (gross, $0 net) | US$6.03 Actions storage (`nemesis-mod`, 17,943 GB-hours), up from US$5.61 on 6 Nov. No paid minutes. |
 
 ## Waiting on Charlie
 | When | What | Notes |
@@ -58,9 +66,9 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
 
 ## Dated reminders
-- 2026-11-09: first rules bot run under HQ (Mon 14:00); the weekly review opens its PR (docs/hq.md "Rules updates"). With PR #52 merged, the bot run should succeed with a "HQ opens the PR" notice.
-- 2026-11-11: snapshot canary (Wed 05:00 UTC, 16:00 Sydney): it must build the newest 26.4 snapshot, not skip, once the canary fix is merged.
-- 2026-11-13: billing check: November's `rigtune`/`nemesis-mod` storage stopped growing after the purge.
+- 2026-11-10: the first rules bot run under PR #52's fix should have landed on the evening of 9 Nov. Check that it succeeded with a "HQ opens the PR" notice, then open, review and merge its PR (docs/hq.md "Rules updates"). If it failed, read the log before anything else.
+- 2026-11-11: snapshot canary (Wed 05:00 UTC, 16:00 Sydney): it must build the newest 26.4 snapshot, not skip. It is expected to fail on the real 26.4 breaks and comment on #49.
+- 2026-11-16: billing and artifacts check, after the 6-7 Nov CI burst expires (13-15 Nov): the artifact count should be back near the low hundreds and November's storage should be growing slowly.
 - 2026-11-16 (then weekly): Krypton's stale jars (astei/krypton #169). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
 - 2026-11-20: if RigTune is still "Under review" on Modrinth (8 weeks), recommend to Charlie that he asks Modrinth's moderators or support (outward: his OK).
 
@@ -81,6 +89,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - review-12/13 lows (`docs/reviews/review-12.md`, `review-13.md`: R12FEAT-2..9, R12X-4/5, R12APPLY-4, R12REL-3/5/6, R12STUTTER-4/5/7, R13-2): triage which still apply on main and fix a few small ones per PR, one area at a time.
 - Leftover v0.5 branches (`fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, `local/v05-battery`): compare each with main (`git cherry`, `git diff origin/main...<b>`) and report what isn't on main, with a keep or delete call. Report only; HQ deletes.
 - Docs drift: check `CONTRIBUTING.md`, `docs/DESIGN.md` and `tools/MC_VERSIONS.md` against the current build and code, and fix what's stale (docs PR).
+- Fabric Loader: RigTune builds and tests on 0.19.5, while 0.20.1 has been stable since 19 Oct. Find out whether CI should test the newer loader, or move to it, and what that costs (`gradle.properties`, the build workflows). Report first; no change to the `fabricloader` requirement without HQ.
 
 ## Housekeeping
 - 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). Kept, because they hold commits that aren't on main: remote and local `fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, local `local/v05-battery`. The weekly review checks each against main (`git cherry`, `git diff origin/main...<b>`) before deleting.
@@ -89,6 +98,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-09 weekly review: numbers, ecosystem and Backlog (Fabric Loader item added). Housekeeping: deleted 22 stale 90-day artifacts (408 MB), removed the old HQ worktree `chore-rigtune-hq-setup`, deleted 19 local branches whose remotes were merged and gone, and settled the old HQ's two review subagent threads. docs/hq.md: the rules bot's real start time.
 - 2026-11-09 hq skill update applied (Charlie, 8 Nov): every local Gradle gate runs through the shared gate queue as a background command; up to 4 workers, none started under 4 GB free RAM; worker briefs get the Approach and Shipping lines and short in-game screenshot and mock lines; the daily and weekly jobs gain backlog steps (both live tasks updated); "Backlog" section added. GitHub CI unchanged.
 - 2026-11-08 HQ handed over to a new thread. New jobs created and bound to it; the old thread's two jobs deleted; release-guard marker moved.
 - 2026-11-07 **0.5.2 released** (tag v0.5.2 at f15e8436, run 42343609374; Modrinth nFIvBLPX and hhiDEjf1). Charlie's check on his desktop passed all 9 steps. He pasted the new Modrinth description. Ops PR #66 was the first merge HQ waited on with a background poll.
