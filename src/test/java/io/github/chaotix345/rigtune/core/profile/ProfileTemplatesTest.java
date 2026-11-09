@@ -155,8 +155,9 @@ class ProfileTemplatesTest {
 			for (List<String> mods : ProfileFixtures.MOD_SETS) {
 				Result result = compute(id, hw, mods, ProfileFixtures.snapshot(mods, true));
 				assertTrue(Integer.parseInt(result.values().get(RD)) <= 8, id + " " + mods + " " + result.values().get(RD));
-				// Quality's own rule value is above the cap, so the heap clamp is what holds it.
-				assertTrue(id != TemplateId.QUALITY || result.clamps().stream().anyMatch(c -> c.key().equals(RD)), id + " " + mods);
+				// Quality's tier is 3 here; since r23 (#68) its rule value is the 2 GB memory entry's 8, so the heap clamp
+				// has nothing left to lower.
+				assertTrue(id != TemplateId.QUALITY || result.values().get(RD).equals("8"), id + " " + mods);
 			}
 		}
 		// Without the small heap, Quality's render distance is the rules' own, above the cap.
