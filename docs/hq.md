@@ -34,7 +34,7 @@ python -m unittest discover -s tools/tests
 
 RigTune is public and uses only standard `ubuntu-24.04` runners, which are free for public repos, so its GitHub CI stays on and `ci-ok` (build.yml) stays the required check (Charlie's decision, 6 Nov 2026). The local gate still runs before every PR.
 
-- Workflows: `build.yml` (push and PR; `ci-ok` aggregates its jobs), `e2e.yml` (reusable; called by build.yml and release.yml), `release.yml` (`v*` tag; dispatch = dry run), `update-rules.yml` (Mon 03:00 UTC), `snapshot-canary.yml` (Wed 05:00 UTC). Sydney is UTC+11 in summer (Oct-Apr) and UTC+10 in winter, so the rules bot lands at 14:00 or 13:00 Sydney.
+- Workflows: `build.yml` (push and PR; `ci-ok` aggregates its jobs), `e2e.yml` (reusable; called by build.yml and release.yml), `release.yml` (`v*` tag; dispatch = dry run), `update-rules.yml` (Mon 03:00 UTC), `snapshot-canary.yml` (Wed 05:00 UTC). Sydney is UTC+11 in summer (Oct-Apr) and UTC+10 in winter, so the rules bot is due at 14:00 or 13:00 Sydney. In practice GitHub has started it 5-7.5 h late every week since October (08:27-10:29 UTC, about 19:30-21:30 Sydney), so the 16:00 weekly review usually finds no bot branch yet, and Tuesday's daily opens the PR.
 - The cost is artifact storage, not minutes. Every upload sets `retention-days` (7 for CI, 30 for `release-files`). The weekly review checks `gh api repos/chaotix345/rigtune/actions/artifacts --jq .total_count` and the billing API (RigTune shows as `rigtune` and as its old name `nemesis-mod`). Before 6 Nov 2026 it stored ~138 GB (US$31.89 gross in October, fully discounted).
 - Re-running a failed job is fine for CI flakes on PRs and main (`gh run rerun <id> --failed`); a release run's re-run is a publish (guard hook).
 
