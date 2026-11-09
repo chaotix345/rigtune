@@ -19,7 +19,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - CI on main green all week (6 of 6 runs). Rules bot: no run under PR #52's fix yet. GitHub has started its 03:00 UTC Monday cron 5-7.5 h late every week (08:27-10:29 UTC, about 19:30-21:30 Sydney), so the 16:00 weekly review finds no branch and the next daily opens the PR. Snapshot canary: it skipped 26.4-snapshot-2 to -7 because `tools/add_mc_version.py` refused snapshots without their own Mod Menu build (fixed by PR #56). Expect the 11 Nov canary to fail on the real 26.4 breaks and comment on #49; that's the intended signal.
 - Artifacts: retention set on every upload (PR #52: 7 days, release-files 30). 9 Nov: 1,250 (about 20 GB, from the 6-7 Nov CI burst), 1,244 of them expiring 13-15 Nov; 4 release-files from Sep expire 26-28 Dec. HQ deleted 22 (408 MB) with GitHub's 90-day default: a 6 Nov push run on `fix/0.5.2-ui-wording`, a branch cut before PR #52. Every workflow on main sets retention.
 - Open issues: 2 (#49, the 26.4 canary; #68, below). Closed 6-7 Nov: #33 (PR #53); #35 #36 #38 #39 #43 (PR #58); #37 #40 #41 #42 #44 #45 #48 (PR #60); #46 #47 (PR #63). No open security alerts.
-- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. It's logged as issue #68, not being worked on (Charlie, 7 Nov: save weekly usage). The text is in `rules/source/knowledge.json`, so a fix goes live on merge with no release. An unfinished, uncommitted start (two new render-distance entries in knowledge.json, not regenerated or tested) sits in worktree `C:\Users\Admin\.t3\worktrees\rigtune\fix-0.5.2-logic` on branch `fix/rules-rd-reason-dh`: keep it for whoever takes #68.
+- Found in the 0.5.2 check: on tier 5 with Distant Horizons, the "Render Distance: 16 → 12" reason argues for 16 ("strong enough for 16 chunks… can push it further"). This is the same kind of bug as #47 item 3. It's logged as issue #68; a worker started on it 9 Nov ("Active work"). The text is in `rules/source/knowledge.json`, so a fix goes live on merge with no release.
 - Ecosystem (9 Nov): no MC 26.4 release or pre-release (still 26.4-snapshot-7, 3 Nov; no snapshot this week). Sodium and Iris have no 26.4 builds; Sodium and Sodium Extra put out 26.3 betas this week (the rules bot picks up availability). Fabric API 0.165.4+26.4 is beta, for snapshot-7; C2ME and Moonrise have 26.4 snapshot alphas. Fabric Loader 0.20.1 has been stable since 19 Oct; RigTune builds on 0.19.5 and needs `>=0.19.5`, so players on 0.20.x run it on a loader CI doesn't test (Backlog). 26.2 is being dropped by mods (Fabric API's last 26.2 build was 18 Sep). Not ready to port: 0.6.0 waits for the 26.4 release and Sodium/Iris.
 
 ## Goals (Charlie, 6 Nov)
@@ -61,6 +61,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - 2026-11-06: HQ may delete the leftover v0.5 scratch branches and worktrees.
 - 2026-11-07: rewrite the Modrinth description (docs/modrinth/body.md) for 0.5.2 (done in PR #65; Charlie pastes it in).
 - 2026-11-06: RigTune stays under chaotix345; GitHub CI stays on.
+- 2026-11-09: HQ makes the internal decisions and orchestrates on its own: which workers to start and when, backlog burns, reviews and merges (Charlie: "i'm authorising u to make those decisions and orchestrate urself"). Outward actions (releases beyond the pre-approved patch releases, Modrinth edits, comments or replies, contacting anyone, sign-ups, spend) still need his OK each time, per CLAUDE.md.
 
 ## Waiting on others
 - Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
@@ -78,7 +79,9 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-None. Charlie (7 Nov) is saving weekly usage for other projects: start no workers until he says so. Keep HQ runs short; the scheduled jobs check and report, and don't start workers.
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:b9292fb7-9c4a-465b-a04c-4ada069bdb01> | `fix/68-rd-reason` | `rules/source/knowledge.json`, generated rules files, recommender if needed, tests | started 9 Nov ~17:00; reports to HQ |
+
+Workers are on again (Charlie, 9 Nov). The earlier untested #68 attempt stays in worktree `fix-0.5.2-logic` (branch `fix/rules-rd-reason-dh`) until #68's PR merges; then remove that worktree.
 
 Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
@@ -98,6 +101,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-09 Charlie handed HQ the internal decisions ("Approved by Charlie"). Workers back on; #68 worker started. Backlog burns run on Sundays.
 - 2026-11-09 weekly review: numbers, ecosystem and Backlog (Fabric Loader item added). Housekeeping: deleted 22 stale 90-day artifacts (408 MB), removed the old HQ worktree `chore-rigtune-hq-setup`, deleted 19 local branches whose remotes were merged and gone, and settled the old HQ's two review subagent threads. docs/hq.md: the rules bot's real start time.
 - 2026-11-09 hq skill update applied (Charlie, 8 Nov): every local Gradle gate runs through the shared gate queue as a background command; up to 4 workers, none started under 4 GB free RAM; worker briefs get the Approach and Shipping lines and short in-game screenshot and mock lines; the daily and weekly jobs gain backlog steps (both live tasks updated); "Backlog" section added. GitHub CI unchanged.
 - 2026-11-08 HQ handed over to a new thread. New jobs created and bound to it; the old thread's two jobs deleted; release-guard marker moved.
