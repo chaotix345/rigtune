@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "revision": 23,
-  "generatedAt": "2026-11-09T05:34:22Z",
+  "generatedAt": "2026-11-09T05:52:04Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1029,7 +1029,7 @@
       },
       "impact": "medium",
       "defaultSelected": false,
-      "reason": "Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware: more cost frame rate without adding much view distance."
+      "reason": "Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware; going past 12 costs frame rate without adding much view distance."
     },
     {
       "key": "vanilla.renderDistance",

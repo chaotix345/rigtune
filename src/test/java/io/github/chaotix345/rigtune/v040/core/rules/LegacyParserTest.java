@@ -34,8 +34,8 @@ class LegacyParserTest {
 	// like any value entry; the value is the one the cap gave before).
 	static final List<String> RENDER_DISTANCE_REASONS_ADDED_IN_R23 = List.of(
 			"With 2 GB or less of memory for Minecraft, 8 chunks is the most that fits in memory without stutter.",
-			"Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware: "
-					+ "more cost frame rate without adding much view distance.");
+			"Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware; "
+					+ "going past 12 costs frame rate without adding much view distance.");
 	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag", "stutter-chunks-loading-tag-sodium");
 
 	private static String bundled() throws IOException {
