@@ -1,12 +1,12 @@
 # Status
 
-HQ owns this file and rewrites it (not appends). Workers report to HQ instead of editing it. Last updated: 2026-11-09 by RigTune HQ.
+HQ owns this file and rewrites it (not appends). Workers report to HQ instead of editing it. Last updated: 2026-11-11 by RigTune HQ.
 
 ## HQ
 - Thread: <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0> (pinned, "RigTune HQ", since 8 Nov). Thread id: `mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0` (workers `t3_thread_send` here). Project id: `951159fe-96cd-4205-939b-630793975b28`. Worktree: `C:\Users\Admin\.t3\worktrees\rigtune\chore-hq-20261108-1100` (HQ marker in its git dir, `C:\Dev\rigtune\.git\worktrees\chore-hq-20261108-1100\rigtune-hq`). The previous HQ (<t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:1a6f4b05932c9083d4ba76e4ee9cf8df5f6b97d3b474dec8790b8c3b8db68746>, 6-8 Nov) is retired; its marker is deleted.
 - Jobs: daily `scheduled-task:902945c8-9117-4c26-b531-3ad79fdfcc87` (11:00, next 10 Nov 11:00); weekly `scheduled-task:d8d1822d-1aa2-47e7-9128-9d62a20a6d98` (Mon 16:00, next 16 Nov 16:00).
 - Secrets: none on this PC. `MODRINTH_TOKEN` is a GitHub Actions secret only (release.yml). HQ has no Modrinth access, so moderation status, messages, comments and reports aren't visible to it.
-- Low RAM on this PC: follow `C:\Users\Admin\Documents\ram-watch\README.md`. Check first with `powershell -ExecutionPolicy Bypass -File C:\Users\Admin\Documents\perfinfo.ps1`: kernel paged pool over 4 GB or nonpaged pool over 2 GB means a kernel leak, and Charlie's restart fixes it. Otherwise stop dev servers you don't need. Never kill the hidden session-0 Python processes. Ask Charlie before uninstalling anything or stopping services. (Charlie, 7 Nov: the 6-7 Nov shortage was an Acronis driver leaking kernel memory, now uninstalled.)
+- Low RAM on this PC: follow `C:\Users\Admin\Documents\ram-watch\README.md`. Check first with `powershell -ExecutionPolicy Bypass -File C:\Users\Admin\Documents\perfinfo.ps1`: kernel paged pool over 4 GB or nonpaged pool over 2 GB means a kernel leak, and Charlie's restart fixes it. Otherwise stop dev servers you don't need. Never kill the hidden session-0 Python processes. Ask Charlie before uninstalling anything or stopping services. Never disable a driver or service without first checking the device-class filter lists (on 10 Nov, disabling a Citrix USB filter killed all USB input at boot), and follow Charlie's rules for boot changes in the README (a restore point first, and an undo that works offline from Windows Recovery). The leaks so far: an Acronis driver (uninstalled 7 Nov), then Citrix Workspace leaking a token per process started (uninstalled 11 Nov, confirmed at about 0 per process afterwards).
 - No earlier coordinator threads or scheduled tasks exist in T3: v0.1-v0.5.1 ran as Claude Code CLI sessions (docs/PROGRESS.md, now history).
 
 ## Where it stands
@@ -66,7 +66,8 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
 
 ## Dated reminders
-- 2026-11-11: snapshot canary (Wed 05:00 UTC, 16:00 Sydney): it must build the newest 26.4 snapshot, not skip. It is expected to fail on the real 26.4 breaks and comment on #49.
+- 2026-11-12: check the 11 Nov snapshot canary run (Wed 05:00 UTC, 16:00 Sydney). It must build the newest 26.4 snapshot, not skip. It's expected to fail on the real 26.4 breaks and comment on #49; triage those breaks into #49.
+- 2026-11-14: RAM check after the Citrix uninstall (11 Nov 01:31 restart). In `C:\Users\Admin\Documents\ram-watch\ram-watch.csv`, tokens were 5.9k → 8.3k and file objects 208k → 473k in the first 9 hours. Tokens should stay roughly flat overnight, and file objects should level off rather than climb every hour. If either keeps climbing, tell Charlie and follow the README (Crash Defender is the next suspect).
 - 2026-11-16: billing and artifacts check, after the 6-7 Nov CI burst expires (13-15 Nov): the artifact count should be back near the low hundreds and November's storage should be growing slowly.
 - 2026-11-16 (then weekly): Krypton's stale jars (astei/krypton #169). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
 - 2026-11-20: if RigTune is still "Under review" on Modrinth (8 weeks), recommend to Charlie that he asks Modrinth's moderators or support (outward: his OK).
