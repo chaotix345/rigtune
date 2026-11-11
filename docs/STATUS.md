@@ -51,7 +51,10 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
-| since 2026-09-28 | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward: needs his OK. Low priority. |
+| 2026-11-12 | Re-enable AMD Crash Defender (Device Manager > System devices > Enable device) | The 11 Nov test was negative: with its manager driver off, tokens rose faster (17.8k → 21.8k in 20 min). |
+| by 2026-11-17 | Send the Modrinth status message HQ drafted (the listing has been under review since about 25 Sep) | Approved 11 Nov. |
+| 2026-11-15 | The nightly-restart setup (Windows updates then a 5-week pause, BIOS power-on, Autologon, T3 in Startup, a scheduled 03:30 restart); Blindstamp HQ sends the combined steps | Also check AnyDesk Unattended Access has a password, and connect once from his phone at the sign-in screen (the AnyDesk service is Automatic and LocalSystem, so it runs before sign-in). |
+| December | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward. Left until after the trip (11 Nov). |
 
 ## Approved by Charlie
 - 2026-09-27: per-call ns footprint budgets in tools/footprint-budgets.json may change (e.g. min(ceiling, 4 x max observed)); ceilings, CPU-ms, bytes, 0-allocation and leak checks stay strict (docs/PROGRESS.md v0.5.0).
@@ -60,6 +63,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - 2026-11-06: HQ may delete the leftover v0.5 scratch branches and worktrees.
 - 2026-11-07: rewrite the Modrinth description (docs/modrinth/body.md) for 0.5.2 (done in PR #65; Charlie pastes it in).
 - 2026-11-06: RigTune stays under chaotix345; GitHub CI stays on.
+- 2026-11-11 (trip, 21 Nov-9 Dec; Charlie on his phone at best, about 10 h behind): no releases during the trip, not even 0.5.x patches, unless something critical breaks, and then ask him first. If MC 26.4 releases during the trip, the 0.6.0 port may be built and tested internally, but the release waits for him. The nightly 03:30 restart stays on during the trip only if both tests pass (16 and 18 Nov). Anything needing him goes before 20 Nov or waits until 10 Dec.
 - 2026-11-09: HQ makes the internal decisions and orchestrates on its own: which workers to start and when, backlog burns, reviews and merges (Charlie: "i'm authorising u to make those decisions and orchestrate urself"). Outward actions (releases beyond the pre-approved patch releases, Modrinth edits, comments or replies, contacting anyone, sign-ups, spend) still need his OK each time, per CLAUDE.md.
 
 ## Waiting on others
@@ -67,10 +71,13 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## Dated reminders
 - 2026-11-12: check the 11 Nov snapshot canary run (Wed 05:00 UTC, 16:00 Sydney). It must build the newest 26.4 snapshot, not skip. It's expected to fail on the real 26.4 breaks and comment on #49; triage those breaks into #49.
-- 2026-11-14: RAM check after the Citrix uninstall (11 Nov 01:31 restart). In `C:\Users\Admin\Documents\ram-watch\ram-watch.csv`, tokens were 5.9k → 8.3k and file objects 208k → 473k in the first 9 hours. Tokens should stay roughly flat overnight, and file objects should level off rather than climb every hour. If either keeps climbing, tell Charlie and follow the README (Crash Defender is the next suspect).
+- 2026-11-12: confirm Charlie re-enabled AMD Crash Defender (`Get-PnpDevice -InstanceId 'ROOT\AMDLOG\0000'` Status OK).
+- 2026-11-16 (morning, before or in the daily): first unattended 03:30 restart. Check that the PC restarted (perfinfo uptime), that T3 came back by itself, and that every HQ's scheduled jobs ran (each HQ's thread, or ask them). Report to Charlie in the trip thread (71ed59fb-77c8-4048-9b0c-e5d77746ed78), and if anything broke, say exactly what.
+- 2026-11-17: has Charlie sent the Modrinth status message? If not, remind him (last chance before the trip).
+- 2026-11-18 (morning): second deliberate restart test, checked and reported the same way. The nightly restart stays on during the trip only if both tests pass.
+- 2026-11-20: last day before the trip. Anything still needing Charlie goes to him today or waits until 10 Dec.
 - 2026-11-16: billing and artifacts check, after the 6-7 Nov CI burst expires (13-15 Nov): the artifact count should be back near the low hundreds and November's storage should be growing slowly.
 - 2026-11-16 (then weekly): Krypton's stale jars (astei/krypton #169). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
-- 2026-11-20: if RigTune is still "Under review" on Modrinth (8 weeks), recommend to Charlie that he asks Modrinth's moderators or support (outward: his OK).
 
 ## Money
 - None spent. GitHub Pro via Education (to 29 Oct 2028). RigTune's Actions storage was fully discounted ($0 net).
@@ -78,7 +85,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-None. Workers are on (Charlie, 9 Nov); HQ starts them as needed.
+None. Workers are on (Charlie, 9 Nov); HQ starts them as needed. From 16 Nov the PC restarts every night at 03:30: no worker or gate may be mid-run then. Evening workers must commit and push before 03:00 (state that in their briefs), and HQ starts no gate or background command that would still be running at 03:30.
 
 Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
@@ -98,6 +105,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-11 Trip plan (Charlie away 21 Nov-9 Dec) agreed in the trip thread: no releases during the trip; the nightly 03:30 restart (tests on 16 and 18 Nov); the Modrinth status message by 17 Nov. RAM: Citrix uninstalled (leak per process fixed); a second, activity-driven leak remains, and AMD Crash Defender tested negative.
 - 2026-11-09 PR #73 merged: **rules r23 live** (#68 render distance reason; raw v1 and v2 show 23). Reviewed by Opus and by Codex gpt-6.1-sol (high); both approved. A wording nit and an r22-equivalence test were added before the merge. The worker thread is settled, and both #68 worktrees are removed.
 - 2026-11-09 Charlie handed HQ the internal decisions ("Approved by Charlie"). Workers back on; #68 worker started. Backlog burns run on Sundays.
 - 2026-11-09 weekly review: numbers, ecosystem and Backlog (Fabric Loader item added). Housekeeping: deleted 22 stale 90-day artifacts (408 MB), removed the old HQ worktree `chore-rigtune-hq-setup`, deleted 19 local branches whose remotes were merged and gone, and settled the old HQ's two review subagent threads. docs/hq.md: the rules bot's real start time.
