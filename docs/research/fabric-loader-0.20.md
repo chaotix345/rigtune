@@ -10,7 +10,7 @@ Recommendation: move the dev loader to 0.20.1 in the next code PR that touches t
 
 ## What players run
 
-- [meta.fabricmc.net](https://meta.fabricmc.net/v2/versions/loader/26.3) lists 0.20.1 as the only `stable` loader for both 26.2 and 26.3 (0.20.0 and 0.19.5 are listed, not stable). The Fabric installer and launchers that read meta install 0.20.1 by default, so most new installs since 19 Oct run RigTune on a loader CI never starts.
+- [meta.fabricmc.net](https://meta.fabricmc.net/v2/versions/loader/26.3) lists 0.20.1 as the only `stable` loader for both 26.2 and 26.3 (0.20.0 and 0.19.5 are listed, not stable). An installer or launcher that takes meta's stable loader installs 0.20.1, so new installs since 19 Oct run RigTune on a loader CI never starts.
 - Fabric API doesn't force the move: its newest 26.3 build, [0.166.2+26.3](https://github.com/FabricMC/fabric-api/blob/0.166.2%2B26.3/src/main/resources/fabric.mod.json) (11 Nov), still needs `fabricloader >=0.19.3`, and the last 26.2 build ([0.161.0+26.2](https://github.com/FabricMC/fabric-api/blob/0.161.0%2B26.2/src/main/resources/fabric.mod.json), 18 Sep) needs `>=0.18.4`.
 
 ## What changed in 0.20.0 and 0.20.1
@@ -51,14 +51,18 @@ What 0.17.5 changes ([0.17.4...0.17.5](https://github.com/FabricMC/Mixin/compare
 
 ## Build on 0.20.1
 
-BUILD_RESULT_PLACEHOLDER
+Run on 15 Nov with `loader_version=0.20.1` set locally (not committed), through the gate queue: `./gradlew build` passed in 4 min 4 s for both 26.2 and 26.3. The unit tests ran on `fabric-loader-junit` 0.20.1: 2,916 per version, 0 failures, 3 skipped. The built jars still declare `"fabricloader": ">=0.19.5"`, which is hand-written in `fabric.mod.json` and doesn't follow `loader_version`.
+
+Not run: the client game tests. They are the only check that starts Minecraft on the new loader, and they need CI or the game-test lock. A PR that moves `loader_version` gets them from CI automatically.
+
+Also checked: with `gradle.properties` back at 0.19.5, `./gradlew -Ploader_version=0.20.1 :26.3:dependencies --configuration compileClasspath` resolves `net.fabricmc:fabric-loader:0.20.1`, and the same command without `-P` resolves 0.19.5. A CI leg could switch the loader without editing the file.
 
 ## Options and costs
 
-**1. Move the dev loader to 0.20.1, keep `>=0.19.5` (recommended).** One line in `gradle.properties`. Every CI run (unit tests, all six client game-test jobs, E2E, compat030/compat040, which read `loader_version` from that file) then tests what new installs run. Costs: no extra CI minutes; no change for players, since the declared minimum stays. What it gives up: 0.19.5 is no longer started by CI. That's an acceptable trade, because the 0.19.5 to 0.20.1 diff has no API change and Loader has kept older mods working across minor versions (the compatibility level above exists for that). Do it in a code PR that runs the full CI anyway (the 0.6.0 port is the natural one); there's no user-facing reason to cut a 0.5.x release for it.
+**1. Move the dev loader to 0.20.1, keep `>=0.19.5` (recommended).** One line in `gradle.properties`. Every CI run (unit tests, all six client game-test jobs, E2E, compat030/compat040, which read `loader_version` from that file) then tests what new installs run. Costs: no extra CI minutes; no change for players, since the declared minimum stays. What it gives up: CI no longer starts 0.19.5. That trade is fine, because the 0.19.5 to 0.20.1 diff has no API change and RigTune's mixins keep the same compatibility level on either loader. Do it in a code PR that runs the full CI anyway (the 0.6.0 port is the natural one); there's no user-facing reason to cut a 0.5.x release for it.
 
-**2. Add a 0.20.x CI leg, keep the dev loader at 0.19.5.** Gradle's `-P` on the command line overrides `gradle.properties`, so a leg could run `-Ploader_version=0.20.1`. The cheapest useful leg is one client game-test leg (one MC version, one backend, both parts): about 17 job-minutes per CI run, measured from main's run 43125625281 (12 Nov: 26.3 OpenGL took 6.4 + 10.8 minutes; the whole run was 60 job-minutes). Wall time stays about the same because legs run in parallel, minutes are free on a public repo, and the extra screenshot/log artifacts add storage at 7-day retention. It also means another matrix dimension in `tools/gametest_matrix.py` and `build.yml`. Testing both loaders on every push buys little given the diff above. Worth it only if Loader starts shipping behaviour changes that matter to RigTune.
+**2. Add a 0.20.x CI leg, keep the dev loader at 0.19.5.** A leg could run `-Ploader_version=0.20.1` (checked above). The cheapest useful leg is one client game-test leg (one MC version, one backend, both parts): about 17 job-minutes per CI run, measured from main's run 43125625281 (12 Nov: 26.3 OpenGL took 6.4 + 10.8 minutes; the whole run was 60 job-minutes). Wall time stays about the same because legs run in parallel, minutes are free on a public repo, and the extra screenshot/log artifacts add storage at 7-day retention. It also means another matrix dimension in `tools/gametest_matrix.py` and `build.yml`. Testing both loaders on every push buys little given the diff above. Worth it only if Loader starts shipping behaviour changes that matter to RigTune.
 
-**3. Raise the minimum to `>=0.20.0`.** Not recommended now. It gains nothing (RigTune needs no 0.20 API) and costs: anyone still on Loader 0.19.x gets Loader's "incompatible mods" screen until they update the loader, and RigTune's mixins move to `COMPATIBILITY_0_17_5` (harmless for its current selectors, but a behaviour change for no reason). Revisit when a Loader feature is actually needed, or at the 26.4 port if Fabric API for 26.4 requires a newer loader anyway.
+**3. Raise the minimum to `>=0.20.0`.** Not recommended now. It gains nothing, since RigTune needs no 0.20 API. It costs two things. Anyone still on Loader 0.19.x gets Loader's "incompatible mods" screen until they update the loader. RigTune's mixins also move to `COMPATIBILITY_0_17_5` (harmless for its current selectors, but a behaviour change for no reason). Revisit when RigTune needs a Loader feature, or at the 26.4 port if Fabric API for 26.4 requires a newer loader anyway.
 
-Either way, `docs/STATUS.md`'s Backlog line can close once option 1 lands.
+With option 1, the Loader line in docs/STATUS.md ("players on 0.20.x run it on a loader CI doesn't test") can be closed once the PR lands.
