@@ -60,7 +60,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
-| Before 20 Nov | PC decisions for the trip (sent to the trip thread 16 Nov): (a) EXPO stays on, (b) no BIOS update until 10 Dec, GPU driver unchanged, (c) a Wi-Fi smart plug as the remote power-cycle fallback (about A$20-30, his spend), tested once from his phone | HQ's recommendation: skip (a) and (b), do (c). Nothing changes on the PC without his OK. |
+| Before 20 Nov | Test the Wi-Fi smart plug once from his phone on mobile data, with the PC idle and not 03:00-03:45 (checklist in the trip thread, 16 Nov) | Decided 16 Nov: EXPO stays on; BIOS and GPU driver unchanged until 10 Dec; Charlie is buying the plug; BIOS "restore on AC power loss = power on" is already set. |
 | December | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward. Left until after the trip (11 Nov). |
 
 ## Approved by Charlie
@@ -111,7 +111,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
-- 2026-11-16 Charlie: 0.6.0 drops 26.2, and HQ may release 0.6.0 when it's ready, trip included ("Approved by Charlie").
+- 2026-11-16 Charlie: 0.6.0 drops 26.2, and HQ may release 0.6.0 when it's ready, trip included ("Approved by Charlie"). PC: yes to all three trip decisions; smart plug checklist sent to the trip thread; ram-watch README updated.
 - 2026-11-16 PR #88 merged (reaches users in the next release): preLaunch's journal reconcile and result reads run on a "RigTune startup records" thread, which CLIENT_STARTED waits for. The wait for a still-running apply helper stays on the launch thread, so mods like Sodium still load their configs after the helper patches them. This fixes the FootprintGameTest CPU-ms flake with the 150 ms ceiling unchanged: render-thread init CPU on CI is 48-72 ms, against a ~98 ms median before. Reviewed by Fable 5.2 and Codex gpt-6.1-sol; both asked for that helper-wait fix, which went in before the merge. The worker thread is settled.
 - 2026-11-16 PR #86 merged: docs-only PRs (every file under `docs/`, or Markdown outside `src/` and `versions/`) skip `java`, `e2e` and the client game tests; `ci-ok` still reports. The worker thread is settled. This ops PR is the first to take the new path.
 - 2026-11-16 Weekly review (Fable: weekly Next). A quiet week for users: no issues opened, Modrinth still under review, 0.5.x downloads flat. Two workers started: docs-only CI skip, and the FootprintGameTest CPU-ms flake. The 26.4 compile port waits for a pre-release (DESIGN.md: no pre-release nodes). Charlie asked about dropping 26.2 in 0.6.0. Housekeeping: old HQ worktree `chore-hq-20261108-1100` removed; 5 merged local branches deleted. docs/hq.md "Merging": check every PR check, not only `ci-ok`.
