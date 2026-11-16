@@ -60,7 +60,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
-| Before 20 Nov | Test the Wi-Fi smart plug once from his phone on mobile data, with the PC idle and not 03:00-03:45 (checklist in the trip thread, 16 Nov) | Decided 16 Nov: EXPO stays on; BIOS and GPU driver unchanged until 10 Dec; Charlie is buying the plug; BIOS "restore on AC power loss = power on" is already set. |
+| Before 20 Nov | Test the Wi-Fi smart plug once from his phone on mobile data, with the PC idle and not 03:00-03:45 (checklist in the trip thread, 16 Nov) | Decided 16 Nov: EXPO stays on; BIOS unchanged until 10 Dec; GPU driver: Charlie said "unchanged" here, then told the coordinating thread he'll update the AMD driver this week (HQ: by Wed 18 Nov evening, keep the old installer for rollback; the 0x141 timeouts predate the current driver); Charlie is buying the plug; BIOS "restore on AC power loss = power on" is already set. |
 | December | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward. Left until after the trip (11 Nov). |
 
 ## Approved by Charlie
