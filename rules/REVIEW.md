@@ -3,7 +3,7 @@
 Target MC versions: 26.3, 26.2. Newest: 26.3.
 
 ## Summary
-- New upstream mods to triage: 6
+- New upstream mods to triage: 7
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 1
 - Rules changed or omitted in rules-v1.json: 51
@@ -14,6 +14,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 | adaptive-tooltips | Adaptive Tooltips | Additive | no |
 | cubes-without-borders | Cubes Without Borders | Fabulously Optimized | no |
 | language-reload | Language Reload | Fabulously Optimized | yes |
+| paginatedadvancements | Paginated Advancements & Custom Frames | Fabulously Optimized | no |
 | polytone | Polytone | Fabulously Optimized | no |
 | puzzle | Puzzle | Fabulously Optimized, Additive | no |
 | zfastsurface | Fast Surface | Additive | yes |
