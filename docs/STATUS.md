@@ -28,7 +28,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## Release plan (6 Nov)
 1. **0.5.2**: released 7 Nov (see "Where it stands"). The next patch (0.5.3) only if a bug needs code; rules fixes ship on main without a release.
-2. **0.6.0, MC 26.4** (needs Charlie's OK) when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (the preLaunch history reconcile is already off the render thread on main, PR #88; review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run), a decision on dropping 26.2, and `loader_version` 0.20.1 (keep `"fabricloader": ">=0.19.5"`; CI's client game tests then cover the new loader; docs/research/fabric-loader-0.20.md).
+2. **0.6.0, MC 26.4** (needs Charlie's OK) when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (the preLaunch history reconcile is already off the render thread on main, PR #88; review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run), dropping 26.2 (Charlie, 16 Nov: 0.6.0 supports 26.3 and 26.4 only), and `loader_version` 0.20.1 (keep `"fabricloader": ">=0.19.5"`; CI's client game tests then cover the new loader; docs/research/fabric-loader-0.20.md).
 
 ## Numbers
 | Date | Source | Number |
@@ -60,7 +60,6 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Waiting on Charlie
 | When | What | Notes |
 |---|---|---|
-| Before 20 Nov | Does 0.6.0 (MC 26.4) drop 26.2? If 26.4 releases during the trip, the port is built internally, so the answer is needed before he leaves | HQ's recommendation: yes, drop 26.2 in 0.6.0 (support 26.3 and 26.4). Fabric API's last 26.2 build was 18 Sep and mods are dropping it; 0.5.2 stays on Modrinth for 26.2 players. Asked in the 16 Nov weekly review. |
 | Before 20 Nov | PC decisions for the trip (sent to the trip thread 16 Nov): (a) EXPO stays on, (b) no BIOS update until 10 Dec, GPU driver unchanged, (c) a Wi-Fi smart plug as the remote power-cycle fallback (about A$20-30, his spend), tested once from his phone | HQ's recommendation: skip (a) and (b), do (c). Nothing changes on the PC without his OK. |
 | December | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward. Left until after the trip (11 Nov). |
 
@@ -72,6 +71,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - 2026-11-07: rewrite the Modrinth description (docs/modrinth/body.md) for 0.5.2 (done in PR #65; Charlie pastes it in).
 - 2026-11-06: RigTune stays under chaotix345; GitHub CI stays on.
 - 2026-11-11 (trip, 21 Nov-9 Dec; Charlie on his phone at best, about 10 h behind): no releases during the trip, not even 0.5.x patches, unless something critical breaks, and then ask him first. If MC 26.4 releases during the trip, the 0.6.0 port may be built and tested internally, but the release waits for him. The nightly 03:30 restart stays on during the trip only if both tests pass (16 and 18 Nov). Anything needing him goes before 20 Nov or waits until 10 Dec.
+- 2026-11-16: 0.6.0 drops MC 26.2 and supports 26.3 and 26.4. 0.5.2 stays on Modrinth for 26.2 players. Releasing 0.6.0 still needs his OK.
 - 2026-11-09: HQ makes the internal decisions and orchestrates on its own: which workers to start and when, backlog burns, reviews and merges (Charlie: "i'm authorising u to make those decisions and orchestrate urself"). Outward actions (releases beyond the pre-approved patch releases, Modrinth edits, comments or replies, contacting anyone, sign-ups, spend) still need his OK each time, per CLAUDE.md.
 
 ## Waiting on others
@@ -110,6 +110,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-16 Charlie: 0.6.0 drops 26.2 ("Approved by Charlie").
 - 2026-11-16 PR #88 merged (reaches users in the next release): preLaunch's journal reconcile and result reads run on a "RigTune startup records" thread, which CLIENT_STARTED waits for. The wait for a still-running apply helper stays on the launch thread, so mods like Sodium still load their configs after the helper patches them. This fixes the FootprintGameTest CPU-ms flake with the 150 ms ceiling unchanged: render-thread init CPU on CI is 48-72 ms, against a ~98 ms median before. Reviewed by Fable 5.2 and Codex gpt-6.1-sol; both asked for that helper-wait fix, which went in before the merge. The worker thread is settled.
 - 2026-11-16 PR #86 merged: docs-only PRs (every file under `docs/`, or Markdown outside `src/` and `versions/`) skip `java`, `e2e` and the client game tests; `ci-ok` still reports. The worker thread is settled. This ops PR is the first to take the new path.
 - 2026-11-16 Weekly review (Fable: weekly Next). A quiet week for users: no issues opened, Modrinth still under review, 0.5.x downloads flat. Two workers started: docs-only CI skip, and the FootprintGameTest CPU-ms flake. The 26.4 compile port waits for a pre-release (DESIGN.md: no pre-release nodes). Charlie asked about dropping 26.2 in 0.6.0. Housekeeping: old HQ worktree `chore-hq-20261108-1100` removed; 5 merged local branches deleted. docs/hq.md "Merging": check every PR check, not only `ci-ok`.
