@@ -200,9 +200,9 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			check(held.await(30, TimeUnit.SECONDS), "fake helper holds the apply lock");
 			long start = System.nanoTime();
 			new RigTunePreLaunch().onPreLaunch();
-			RigTunePreLaunch.awaitRecords();
 			long waited = Duration.ofNanos(System.nanoTime() - start).toMillis();
 			check(waited >= 4500, "preLaunch waited for the running helper: " + waited + " ms");
+			RigTunePreLaunch.awaitRecords();
 			release.countDown();
 			helper.join(30_000);
 		} catch (InterruptedException e) {

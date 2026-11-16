@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -45,22 +46,63 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 
 	static final String RECORDS_THREAD = FootprintStats.THREAD_PREFIX + " startup records";
 	private static volatile CompletableFuture<Void> records = CompletableFuture.completedFuture(null);
+	private static volatile boolean startedAfterRecords;
 
-	// The reads below load Gson and RigTune's history classes and reconcile the journal: tens of ms of CPU that needn't hold
-	// up the render thread. They run on a thread of their own; CLIENT_STARTED waits for them before anything reads the journal
-	// or the results (RigTuneClient, awaitRecords).
+	// The wait for a helper still running stays here and holds up the launch: mods read (and rewrite) their configs during
+	// their init, Sodium its sodium-options.json, so they must start after the helper has patched them. The reads after it
+	// load Gson and RigTune's history classes and reconcile the journal, tens of ms of CPU that needn't hold up the render
+	// thread: they run on a thread of their own, and CLIENT_STARTED waits for them before anything reads the journal or the
+	// results (afterRecords).
 	@Override
 	public void onPreLaunch() {
 		long footprint = FootprintStats.preLaunchStart();
 		Path configDir = FabricLoader.getInstance().getConfigDir();
-		startRecords(() -> readRecords(configDir));
+		Path lockFile = ApplyLock.defaultPath(configDir);
+		HelperCheck helper = checkHelper(lockFile, HELPER_WAIT);
+		if (helper.busy()) {
+			helperBusy = true;
+			RigTune.LOGGER.warn(helper.free()
+					? "RigTune's apply helper finished while the game was starting; mod file changes take effect after the next restart"
+					: "RigTune's apply helper is still running; its changes take effect after the next restart");
+		}
+		startRecords(() -> readRecords(configDir, lockFile, helper));
 		FootprintStats.preLaunchEnd(footprint);
 	}
 
+	// busy: the helper held the apply lock at first; free: the lock was free (at once or within `wait`), and is released
+	// again. Neither on an error, as before: the reads then go ahead without the lock.
+	record HelperCheck(boolean busy, boolean free) {
+	}
+
+	static HelperCheck checkHelper(Path lockFile, Duration wait) {
+		boolean busy = false;
+		try {
+			ApplyLock lock = ApplyLock.acquire(lockFile, Duration.ZERO);
+			if (lock == null) {
+				// Fabric has already picked the mod jars by now, so whatever the helper still renames loads next time.
+				busy = true;
+				RigTune.LOGGER.warn("RigTune's apply helper from the last session is still running; waiting up to {} s", wait.toSeconds());
+				lock = ApplyLock.acquire(lockFile, wait);
+			}
+			if (lock != null) {
+				lock.close();
+				return new HelperCheck(busy, true);
+			}
+		} catch (IOException e) {
+			RigTune.LOGGER.warn("Could not check {}", lockFile, e);
+		}
+		return new HelperCheck(busy, false);
+	}
+
 	static void startRecords(Runnable read) {
+		startRecords(read, task -> new Thread(task, RECORDS_THREAD));
+	}
+
+	// A thread that can't be started (no memory for one) means the reads run here, as before.
+	static void startRecords(Runnable read, Function<Runnable, Thread> newThread) {
 		CompletableFuture<Void> done = new CompletableFuture<>();
 		records = done;
-		Thread thread = new Thread(() -> {
+		Runnable task = () -> {
 			try {
 				FootprintStats.records(read);
 			} catch (Throwable t) {
@@ -68,9 +110,15 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 			} finally {
 				done.complete(null);
 			}
-		}, RECORDS_THREAD);
-		thread.setDaemon(true);
-		thread.start();
+		};
+		try {
+			Thread thread = newThread.apply(task);
+			thread.setDaemon(true);
+			thread.start();
+		} catch (Throwable t) {
+			RigTune.LOGGER.warn("Could not start a thread for RigTune's startup records; reading them now", t);
+			task.run();
+		}
 	}
 
 	// Blocks until preLaunch's reads are done (at once when they are).
@@ -78,27 +126,39 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		records.join();
 	}
 
+	// The CLIENT_STARTED handler: start runs once preLaunch's reads are done.
+	public static Runnable afterRecords(Runnable start) {
+		return () -> {
+			awaitRecords();
+			startedAfterRecords = true;
+			start.run();
+		};
+	}
+
+	// True once a start ran through afterRecords (FootprintGameTest).
+	public static boolean startedAfterRecords() {
+		return startedAfterRecords;
+	}
+
 	static boolean recordsDone() {
 		return records.isDone();
 	}
 
-	private static void readRecords(Path configDir) {
-		Path lockFile = ApplyLock.defaultPath(configDir);
+	// The lock is taken again here: it belongs to the thread that took it. It was free a moment ago, so it is normally
+	// free now; held by someone else (within HELPER_WAIT), the reads go on as for a helper still running.
+	private static void readRecords(Path configDir, Path lockFile, HelperCheck helper) {
 		ApplyLock lock = null;
-		boolean busy = false;
-		try {
-			lock = ApplyLock.acquire(lockFile, Duration.ZERO);
-			if (lock == null) {
-				// Fabric has already picked the mod jars by now, so whatever the helper still renames loads next time.
-				busy = true;
-				RigTune.LOGGER.warn("RigTune's apply helper from the last session is still running; waiting up to {} s", HELPER_WAIT.toSeconds());
+		boolean stillRunning = helper.busy() && !helper.free();
+		if (helper.free()) {
+			try {
 				lock = ApplyLock.acquire(lockFile, HELPER_WAIT);
+				stillRunning = lock == null;
+			} catch (IOException e) {
+				RigTune.LOGGER.warn("Could not check {}", lockFile, e);
 			}
-		} catch (IOException e) {
-			RigTune.LOGGER.warn("Could not check {}", lockFile, e);
 		}
 		try {
-			readAtStart(configDir, ClientJournal.get(), lock != null, busy && lock == null, ClientState.shared(configDir).lastShownApply,
+			readAtStart(configDir, ClientJournal.get(), lock != null, stillRunning, ClientState.shared(configDir).lastShownApply,
 					() -> StaleGroups.loadedFrom(FabricLoader.getInstance().getAllMods()));
 		} finally {
 			if (lock != null) {
@@ -106,19 +166,13 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 			}
 		}
 		// A helper still running writes a newer result; its failures are logged at the next start.
-		if (!busy || lock != null) {
+		if (!stillRunning) {
 			try {
 				warnOnce(configDir, InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir()), ClientState.shared(configDir), RigTune.LOGGER::warn,
 						staleOps);
 			} catch (Throwable t) {
 				RigTune.LOGGER.warn("Could not check the last RigTune apply result for failures", t);
 			}
-		}
-		if (busy) {
-			helperBusy = true;
-			RigTune.LOGGER.warn(lock == null
-					? "RigTune's apply helper is still running; its changes take effect after the next restart"
-					: "RigTune's apply helper finished while the game was starting; mod file changes take effect after the next restart");
 		}
 	}
 

@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.RigTunePreLaunch;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.launcher.LauncherRepairService;
 import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
@@ -288,6 +289,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		// inside them). A worker resolving them meanwhile (the start hook's task) is allowed and counts in workerCpuMs5s.
 		String resolved = FootprintStats.renderThreadResolve();
 		out.put("v05RenderThreadResolve", resolved);
+		// The CLIENT_STARTED handler started RigTune through the barrier on preLaunch's reads (RigTunePreLaunch.afterRecords).
+		check(RigTunePreLaunch.startedAfterRecords(), "RigTune started after preLaunch's reads finished");
 		check(resolved == null, "no v0.5 service resolved on the render thread during startup: " + resolved);
 	}
 
