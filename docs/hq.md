@@ -46,6 +46,7 @@ RigTune is public and uses only standard `ubuntu-24.04` runners, which are free 
 - What merging changes for users: **`rules/rules-v1.json` and `rules/rules-v2.json` on `main` are live at once** for every installed RigTune (0.1.x reads v1, 0.2+ reads v2, from raw.githubusercontent.com). Everything else (code, the bundled rules copy, docs) reaches users only in a release.
 - After merging anything under `rules/`, verify the raw files: `curl -s https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/rules-v2.json | python -c "import json,sys;print(json.load(sys.stdin)['revision'])"` (and the same for v1) returns 200 and main's revision. The CDN can lag a few minutes; retry before worrying.
 - A merge to main can still go red on main (time-dependent CI): check main's own build run after merging and before any tag.
+- The ruleset's `ci-ok` can be satisfied by either build run on the head commit: a branch push and its pull_request run each report one. On 16 Nov, ops PR #83 auto-merged on the push run's green `ci-ok` while its pull_request run was red (a FootprintGameTest flake). Before merging, and after an auto-merge, look at `gh pr checks <n>` and treat any red check as a failure to explain.
 
 ## Rules updates
 
