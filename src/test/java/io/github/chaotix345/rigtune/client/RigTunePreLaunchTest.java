@@ -13,8 +13,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -112,5 +116,34 @@ class RigTunePreLaunchTest {
 		assertEquals(0, RigTunePreLaunch.takeLeftoverFileOps());
 		assertEquals(List.of("1 staged RigTune change(s) were not applied; they will be retried at the next exit"), lines);
 		RigTunePreLaunch.takeUnseenResult();
+	}
+
+	// preLaunch's reads run on a RigTune thread, off the render thread; CLIENT_STARTED waits for them (awaitRecords), and a
+	// failure there never reaches the game.
+	@Test
+	void theStartupRecordsAreReadOffTheCallingThreadAndAwaited() throws InterruptedException {
+		CountDownLatch release = new CountDownLatch(1);
+		AtomicReference<Thread> ranOn = new AtomicReference<>();
+		RigTunePreLaunch.startRecords(() -> {
+			ranOn.set(Thread.currentThread());
+			try {
+				release.await(10, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		});
+		assertFalse(RigTunePreLaunch.recordsDone(), "startRecords returns before the reads finish");
+		release.countDown();
+		RigTunePreLaunch.awaitRecords();
+		assertTrue(RigTunePreLaunch.recordsDone());
+		assertTrue(ranOn.get() != Thread.currentThread() && ranOn.get().getName().startsWith(FootprintStats.THREAD_PREFIX),
+				"read on a RigTune thread: " + ranOn.get());
+		assertTrue(ranOn.get().isDaemon());
+
+		RigTunePreLaunch.startRecords(() -> {
+			throw new IllegalStateException("unreadable");
+		});
+		RigTunePreLaunch.awaitRecords();
+		assertTrue(RigTunePreLaunch.recordsDone());
 	}
 }

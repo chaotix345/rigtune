@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -42,10 +43,46 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	private static volatile boolean helperBusy;
 	static final Duration HELPER_WAIT = Duration.ofSeconds(5);
 
+	static final String RECORDS_THREAD = FootprintStats.THREAD_PREFIX + " startup records";
+	private static volatile CompletableFuture<Void> records = CompletableFuture.completedFuture(null);
+
+	// The reads below load Gson and RigTune's history classes and reconcile the journal: tens of ms of CPU that needn't hold
+	// up the render thread. They run on a thread of their own; CLIENT_STARTED waits for them before anything reads the journal
+	// or the results (RigTuneClient, awaitRecords).
 	@Override
 	public void onPreLaunch() {
 		long footprint = FootprintStats.preLaunchStart();
 		Path configDir = FabricLoader.getInstance().getConfigDir();
+		startRecords(() -> readRecords(configDir));
+		FootprintStats.preLaunchEnd(footprint);
+	}
+
+	static void startRecords(Runnable read) {
+		CompletableFuture<Void> done = new CompletableFuture<>();
+		records = done;
+		Thread thread = new Thread(() -> {
+			try {
+				FootprintStats.records(read);
+			} catch (Throwable t) {
+				RigTune.LOGGER.warn("Could not read RigTune's records at startup", t);
+			} finally {
+				done.complete(null);
+			}
+		}, RECORDS_THREAD);
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	// Blocks until preLaunch's reads are done (at once when they are).
+	public static void awaitRecords() {
+		records.join();
+	}
+
+	static boolean recordsDone() {
+		return records.isDone();
+	}
+
+	private static void readRecords(Path configDir) {
 		Path lockFile = ApplyLock.defaultPath(configDir);
 		ApplyLock lock = null;
 		boolean busy = false;
@@ -83,7 +120,6 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 					? "RigTune's apply helper is still running; its changes take effect after the next restart"
 					: "RigTune's apply helper finished while the game was starting; mod file changes take effect after the next restart");
 		}
-		FootprintStats.preLaunchEnd(footprint);
 	}
 
 	// docs/v0.3/SPEC.md 3e (review B-M1): one WARN line per op the last helper run didn't apply, so the reason is in

@@ -56,7 +56,7 @@ public final class HistoryStartup {
 				plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).forEach(pendingIds::add);
 			}
 			List<ApplyResult.OpResult> results = lastApply == null ? List.of() : lastApply.results();
-			// One read of history.json and at most one write, relabel included (review 11 PERF-1: this is the render thread).
+			// One read of history.json and at most one write, relabel included (review 11 PERF-1: the game's start waits for it).
 			SkippedClaims.Relabel[] found = new SkippedClaims.Relabel[1];
 			boolean updated = journal.updateExisting(entries -> {
 				List<JournalEntry> reconciled = HistoryUpdates.reconcile(entries, pendingIds, results);
