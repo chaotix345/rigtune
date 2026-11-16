@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.RigTunePreLaunch;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.launcher.LauncherRepairService;
 import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
@@ -196,7 +197,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 	// of 50+ entries, nothing staged), -Drigtune.footprint.returning=true and -Drigtune.footprint.fresh=<the same leg's
 	// footprint JSON from its main run>. Only the startup keys are measured; the seed must be what the game started with.
 	// The render-thread and worker CPU are gated on what they add over that fresh start (coordinator, 2026-09-28: 0.4.0
-	// already paid most of it, and moving preLaunch's history reconcile off the render thread is a v0.6 item), the wall
+	// already paid most of it; preLaunch's history reconcile now runs off the render thread), the wall
 	// times against their usual budgets. Written to footprint-<mc>-<backend>-returning.json.
 	private static final String RETURNING = "rigtune.footprint.returning";
 	private static final String RETURNING_FRESH = "rigtune.footprint.fresh";
@@ -274,6 +275,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		out.put("initCpuMs", ms(s.initCpuNs()));
 		out.put("clientStartedCpuMs", ms(s.clientStartedCpuNs()));
 		out.put("threadMxBeanInitMs", ms(s.mxInitNs()));
+		// Not gated: preLaunch's reads on their own thread (RigTunePreLaunch.startRecords), finished before CLIENT_STARTED.
+		out.put("preLaunchRecordsCpuMs", FootprintStats.recordsCpuNs() < 0 ? null : ms(FootprintStats.recordsCpuNs()));
 		Map<String, Double> byThread = new TreeMap<>();
 		s.windowCpuNs().forEach((name, nanos) -> byThread.put(name, ms(nanos)));
 		out.put("workerCpuMsByThread", byThread);
@@ -286,6 +289,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		// inside them). A worker resolving them meanwhile (the start hook's task) is allowed and counts in workerCpuMs5s.
 		String resolved = FootprintStats.renderThreadResolve();
 		out.put("v05RenderThreadResolve", resolved);
+		// The CLIENT_STARTED handler started RigTune through the barrier on preLaunch's reads (RigTunePreLaunch.afterRecords).
+		check(RigTunePreLaunch.startedAfterRecords(), "RigTune started after preLaunch's reads finished");
 		check(resolved == null, "no v0.5 service resolved on the render thread during startup: " + resolved);
 	}
 

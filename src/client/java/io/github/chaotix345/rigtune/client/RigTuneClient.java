@@ -85,7 +85,8 @@ public final class RigTuneClient implements ClientModInitializer {
 		InputConstants.Type keyboard = InputConstants.Type.KEYSYM;
 		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", keyboard, InputConstants.KEY_F8, category));
 
-		ClientLifecycleEvents.CLIENT_STARTED.register(minecraft -> FootprintStats.clientStarted(() -> real.start(minecraft)));
+		// preLaunch's reads (history reconcile, the helper's result, pending.json) finish first; any wait counts in clientStartedWallMs.
+		ClientLifecycleEvents.CLIENT_STARTED.register(minecraft -> FootprintStats.clientStarted(RigTunePreLaunch.afterRecords(() -> real.start(minecraft))));
 		registerStartupTime(real);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {
 			SettingsSaver.shared().flush(2_000);

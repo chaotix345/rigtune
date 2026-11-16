@@ -31,6 +31,7 @@ public final class FootprintStats {
 	private static volatile long clientStartedWallNs = UNSET;
 	private static volatile long clientStartedCpuNs = UNSET;
 	private static volatile long mxInitNs = UNSET;
+	private static volatile long recordsCpuNs = UNSET;
 	private static volatile @Nullable Map<String, Long> windowCpuNs;
 	// The CPU clock at each start: preLaunch and init both run on the main thread, one after the other.
 	private static long preLaunchCpuStart;
@@ -74,6 +75,25 @@ public final class FootprintStats {
 			preLaunchWallNs = System.nanoTime() - start;
 			preLaunchCpuNs = singleThreadCpu(since(preLaunchCpuStart), preLaunchWallNs);
 		}
+	}
+
+	// preLaunch's reads, on their own thread (RigTunePreLaunch.startRecords): its CPU, kept for the footprint report. Only the
+	// launch's own run counts.
+	static void records(Runnable read) {
+		long start = cpu();
+		try {
+			read.run();
+		} finally {
+			long used = since(start);
+			if (recordsCpuNs == UNSET) {
+				recordsCpuNs = used;
+			}
+		}
+	}
+
+	// The CPU of preLaunch's reads off the render thread; UNSET until they ran (or on a JVM without thread CPU times).
+	public static long recordsCpuNs() {
+		return recordsCpuNs;
 	}
 
 	public static long initStart() {
