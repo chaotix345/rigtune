@@ -35,7 +35,52 @@ env:
   GAMETEST_PARTS: 2
 
 jobs:
+  # Docs only (every changed file is under docs/ or is Markdown outside src/ and versions/): java, e2e and the game tests
+  # are skipped, and ci-ok still reports, since it counts a skipped job as passed. A pull request is compared with the base
+  # side of its merge commit, a branch push with its merge base on main. Pushes to main, tags, dispatches and an empty
+  # diff always run everything.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - id: diff
+        name: Code or docs only
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -eu
+          case "$EVENT:$REF" in
+            pull_request:*) base=HEAD^1 ;;
+            push:refs/heads/main) base= ;;
+            push:refs/heads/*) base=$(git merge-base origin/main HEAD || true) ;;
+            *) base= ;;
+          esac
+          code=true
+          if [ -n "$base" ]; then
+            files=$(git diff --name-only --no-renames "$base" HEAD)
+            echo "$files"
+            if [ -n "$files" ]; then
+              code=false
+              while IFS= read -r f; do
+                case "$f" in
+                  src/*|versions/*) code=true ;;
+                  docs/*|*.md) ;;
+                  *) code=true ;;
+                esac
+              done <<< "$files"
+            fi
+          fi
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+
   java:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -171,6 +216,8 @@ jobs:
   # The client-gametest legs, one per Minecraft node in versions/*/: OpenGL for every node, plus Vulkan from 26.3 on.
   # A new node gets its legs without editing this file (tools/gametest_matrix.py, tested in tools/tests).
   gametest-matrix:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -425,7 +472,7 @@ jobs:
   # Minecraft nodes (tools/gametest_matrix.py), so a required list of their names would break when a node is added.
   ci-ok:
     if: always()
-    needs: [java, e2e, gametest-matrix, client-gametest, python, rules-consistency, rules-v1-compat]
+    needs: [changes, java, e2e, gametest-matrix, client-gametest, python, rules-consistency, rules-v1-compat]
     runs-on: ubuntu-24.04
     steps:
       - name: Every job passed or was skipped

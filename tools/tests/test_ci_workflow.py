@@ -112,6 +112,24 @@ class BuildWorkflowTests(unittest.TestCase):
     def test_the_parser_sees_every_job(self):
         self.assertTrue({"java", "gametest-matrix", "client-gametest", "python", "rules-consistency", "rules-v1-compat"} <= set(self.jobs))
 
+    # ci-ok is the one required check: it waits for every other job and fails on anything but success or skipped.
+    def test_ci_ok_needs_every_job_and_passes_skipped(self):
+        needs = {n.strip() for n in self.jobs["ci-ok"]["keys"]["needs"].strip("[]").split(",")}
+        self.assertEqual(set(self.jobs) - {"ci-ok"}, needs)
+        self.assertEqual("always()", self.jobs["ci-ok"]["keys"]["if"])
+        self.assertIn("success|skipped) ;;", self.jobs["ci-ok"]["steps"][0]["run"])
+
+    # A docs-only change skips the build, the E2E (needs java) and the game tests (need gametest-matrix); the cheap checks
+    # always run.
+    def test_docs_only_skips_only_the_build_and_game_tests(self):
+        for name in ("java", "gametest-matrix"):
+            self.assertEqual("changes", self.jobs[name]["keys"]["needs"], name)
+            self.assertRegex(self.jobs[name]["keys"]["if"], r"^needs\.changes\.outputs\.code == 'true'?$", name)
+        self.assertEqual("java", self.jobs["e2e"]["keys"]["needs"])
+        self.assertEqual("gametest-matrix", self.jobs["client-gametest"]["keys"]["needs"])
+        for name in ("python", "rules-consistency", "rules-v1-compat"):
+            self.assertNotIn("needs", self.jobs[name]["keys"], name)
+
     # AC1a.1: in each job that builds, one "Resolve dependencies (network)" step comes before every other Gradle step, and
     # every Gradle command after it runs --offline.
     def test_gradle_runs_offline_after_the_one_resolve_step(self):
