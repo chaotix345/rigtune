@@ -76,6 +76,10 @@ Releases are tag-driven and **public**: pushing a `v*` tag runs `release.yml` (b
 
 On handover, the new HQ creates its marker (`echo "RigTune HQ <thread id> <date>" > "$(git rev-parse --absolute-git-dir)/rigtune-hq"`) and deletes the old HQ worktree's marker.
 
+## Coordinating thread (Charlie, 17 Nov)
+
+Charlie's coordinating thread is `e20bf07b-0fe3-41a9-bea4-dd75c6a58593`. Whenever HQ posts something for Charlie (a new ask or date for him, a decision he made, an item done or dropped, a plan change), it also sends a 1-5 line copy there with `t3_thread_send` (`mode: "queue"`), starting "From RigTune HQ:". No routine progress, no secrets, and nothing between 23:00 and 07:00 Sydney unless it's urgent. That thread forwards anything Charlie says that affects RigTune, so don't ask him again. On handover, the new HQ sends that thread its thread id in its first turn.
+
 ## Workers
 
 Use the skill's brief (`templates/worker-brief.md`) with:
