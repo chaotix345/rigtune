@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 23,
-  "generatedAt": "2026-11-09T05:52:04Z",
+  "revision": 24,
+  "generatedAt": "2026-11-16T10:36:16Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1735,6 +1735,7 @@
         "morechathistory",
         "moreculling",
         "optigui",
+        "paginatedadvancements",
         "placeholder-api",
         "polytone",
         "puzzle",
