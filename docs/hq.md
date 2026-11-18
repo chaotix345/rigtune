@@ -78,7 +78,7 @@ On handover, the new HQ creates its marker (`echo "RigTune HQ <thread id> <date>
 
 ## Coordinating thread (Charlie, 17 Nov)
 
-Charlie's coordinating thread is `e20bf07b-0fe3-41a9-bea4-dd75c6a58593`. Whenever HQ posts something for Charlie (a new ask or date for him, a decision he made, an item done or dropped, a plan change), it also sends a 1-5 line copy there with `t3_thread_send` (`mode: "queue"`), starting "From RigTune HQ:". No routine progress, no secrets, and nothing between 23:00 and 07:00 Sydney unless it's urgent. That thread forwards anything Charlie says that affects RigTune, so don't ask him again. On handover, the new HQ sends that thread its thread id in its first turn.
+Charlie's coordinating thread is `mcp:launch:79c4c389aa0e9f20dc2cd4c24b34ef2b0be7a4a69410b7191d33a1afff2f226c` (since 18 Nov; the earlier `e20bf07b` is retired). If it moves again, the coordinating thread says so; update this line and STATUS.md "HQ". Whenever HQ posts something for Charlie (a new ask or date for him, a decision he made, an item done or dropped, a plan change), it also sends a 1-5 line copy there with `t3_thread_send` (`mode: "queue"`), starting "From RigTune HQ:". No routine progress, no secrets, and nothing between 23:00 and 07:00 Sydney unless it's urgent. That thread forwards anything Charlie says that affects RigTune, so don't ask him again. On handover, the new HQ sends that thread its thread id in its first turn.
 
 ## Workers
 
