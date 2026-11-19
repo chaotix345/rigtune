@@ -81,6 +81,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## Dated reminders
 - 2026-11-20: last day before the trip. Anything still needing Charlie goes to him today or waits until 10 Dec.
+- 2026-12-09, 08:30-10:00: keep the PC free for Smoov HQ, which allocates Charlie's UTS classes in his Chrome at 09:00 (relayed by the coordinating thread, 19 Nov). Start no RigTune worker, gate or background job that would run in that window. **At all times: leave Chrome and its myTimetable tab alone.**
 - 2026-11-23 (then weekly): Krypton's stale jars (astei/krypton #169; open, no reply, newest jar still 0.3.2 of 30 Sep on 16 Nov). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
 
 ## Money
