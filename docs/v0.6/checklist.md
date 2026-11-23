@@ -35,9 +35,10 @@ DESIGN.md line 344).
 Build and Stonecutter:
 - [ ] `settings.gradle:31` `versions '26.2', '26.3'`: remove `'26.2'`.
 - [ ] Move the committed state to 26.3, all three together: `settings.gradle:32` `vcsVersion`, `stonecutter.gradle:6`
-      `stonecutter.active`, and `.github/workflows/build.yml:142-145` (the step name and `VCS_MC`). Run
-      `./gradlew "Set active project to 26.3"` before changing them, so `src/` is in the 26.3 state when you commit.
-      Afterwards `./gradlew "Reset active project"` should leave `git diff` showing only your edits.
+      `stonecutter.active`, and `.github/workflows/build.yml:142-145` (the step name and `VCS_MC`). A suggested
+      order, not yet tried: run `./gradlew "Set active project to 26.3"` before changing them, so `src/` is in the
+      26.3 state when you commit. Afterwards `./gradlew "Reset active project"` should leave `git diff` showing only
+      your edits, which is what CI's "Check sources" step checks.
 - [ ] Delete `versions/26.2/`.
 - [ ] Delete the conditional branches only 26.2 used (Stonecutter doesn't prune them). `RowList.java:32`
       (`//? if <26.3`) goes. Every `//? if >=26.3` block becomes plain code: `RigTuneClient.java:82`,
