@@ -6,6 +6,13 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ## [Unreleased]
 
+### Changed
+- **RigTune does less on the game's main thread at launch.** It reads its history and last results on a thread of its own ("RigTune startup records") while the game loads, and waits for that thread only when the game has started. On the CI test machines, RigTune's CPU time on the render thread during start-up fell from a median of about 98 ms to 48-72 ms. If the last session's Apply is still finishing when you launch, RigTune still waits for it before mods like Sodium read their settings.
+- The rules copy inside the jar, used until RigTune can download the current rules, is revision 24 (0.5.2 shipped 22).
+- Rules updates you got without updating RigTune:
+  - Revision 23: with Distant Horizons rendering on a fast PC, the render distance suggestion no longer gives a reason that argues for more chunks than it suggests. It now reads "Distant Horizons already draws the far terrain cheaply, so 12 vanilla chunks is a good balance on this hardware; going past 12 costs frame rate without adding much view distance." With 2 GB or less of memory for Minecraft, the 8-chunk suggestion gives that as its reason. The suggested values don't change.
+  - Revision 24: the Fabulously Optimized mod list is refreshed.
+
 ## [0.5.2] - 2026-11-07
 
 ### Changed
