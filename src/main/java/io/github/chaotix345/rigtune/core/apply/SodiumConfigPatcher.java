@@ -154,6 +154,15 @@ public final class SodiumConfigPatcher {
 		return new Staged(List.copyOf(ops), refused);
 	}
 
+	// The file's current values as flat dotted keys; empty if the file is missing or unreadable.
+	public static Map<String, String> readValues(Path file) {
+		try {
+			return Files.isRegularFile(file) ? flatten(JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject(), "") : Map.of();
+		} catch (IOException | RuntimeException e) {
+			return Map.of();
+		}
+	}
+
 	public static Map<String, String> flatten(JsonObject obj, String prefix) {
 		Map<String, String> out = new LinkedHashMap<>();
 		flattenInto(obj, prefix, out);

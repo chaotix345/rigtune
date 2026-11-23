@@ -99,6 +99,52 @@ class StagedNetTest {
 		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
 	}
 
+	// A -> B -> A, then the player picks C in Sodium's own screen before quitting: the helper puts A back over C, which is
+	// a change, though the journal's chain starts and ends on A.
+	@Test
+	void anOutsideEditTheHelperOverwritesCounts() throws IOException {
+		switchTo(Map.of(DEFER, "ALWAYS"), "e1");
+		switchTo(Map.of(DEFER, "ONE_FRAME"), "e2");
+		editOutside("ZERO_FRAMES");
+		assertTrue(pending());
+		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
+	}
+
+	// A -> B -> A, then the key is taken out of the file: the helper puts it back, which is a change.
+	@Test
+	void aKeyRemovedOutsideThatTheHelperPutsBackCounts() throws IOException {
+		switchTo(Map.of(DEFER, "ALWAYS"), "e1");
+		switchTo(Map.of(DEFER, "ONE_FRAME"), "e2");
+		Files.writeString(sodium, "{\"performance\":{\"use_entity_culling\":true}}", StandardCharsets.UTF_8);
+		assertTrue(pending());
+		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
+	}
+
+	// A helper killed after it patched the file and before it wrote last-apply.json leaves the op pending; the next run
+	// finds B already there. RigTune did change A to B, so the count falls back to the journal's before and says 1.
+	@Test
+	void aHelperKilledAfterThePatchStillCountsTheChange() throws IOException {
+		switchTo(Map.of(DEFER, "ALWAYS"), "e1");
+		for (Op op : PendingActions.load(pendingFile).ops()) {
+			SodiumConfigPatcher.patchFile(Path.of(op.path()), op.patches());
+		}
+		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
+	}
+
+	// The price of that fallback: A -> B with the player picking B in Sodium's screen looks the same as the killed helper,
+	// so it counts 1 too, as before 0.6.0, though Discard pending already says nothing is pending.
+	@Test
+	void anOutsideEditToTheStagedValueCountsAsAKilledHelperWould() throws IOException {
+		switchTo(Map.of(DEFER, "ALWAYS"), "e1");
+		editOutside("ALWAYS");
+		assertFalse(pending());
+		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
+	}
+
+	private void editOutside(String defer) throws IOException {
+		Files.writeString(sodium, "{\"performance\":{\"chunk_build_defer_mode\":\"" + defer + "\",\"use_entity_culling\":true}}", StandardCharsets.UTF_8);
+	}
+
 	private boolean pending() throws IOException {
 		return PendingNet.changesSomething(PendingActions.load(pendingFile).ops(), (op, keyInFile) -> file().get("sodium." + keyInFile));
 	}

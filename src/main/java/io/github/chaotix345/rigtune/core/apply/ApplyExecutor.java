@@ -878,9 +878,18 @@ public final class ApplyExecutor {
 			return switch (op.type()) {
 				case ENABLE_FILE -> enable(op, index);
 				case DISABLE_FILE -> disable(op, index, disableTarget);
-				case PATCH_JSON -> new Applied(patchJson(op), null);
-				case PATCH_TOML -> new Applied(patchConfig(op, TomlConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null);
-				case PATCH_PROPERTIES -> new Applied(patchConfig(op, PropertiesConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null);
+				case PATCH_JSON -> {
+					Map<String, String> before = valuesBefore(op, SodiumConfigPatcher.readValues(Path.of(op.path())));
+					yield new Applied(patchJson(op).withBefore(before), null);
+				}
+				case PATCH_TOML -> {
+					Map<String, String> before = valuesBefore(op, TomlConfigPatcher.readValues(Path.of(op.path())));
+					yield new Applied(patchConfig(op, TomlConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))).withBefore(before), null);
+				}
+				case PATCH_PROPERTIES -> {
+					Map<String, String> before = valuesBefore(op, PropertiesConfigPatcher.readValues(Path.of(op.path())));
+					yield new Applied(patchConfig(op, PropertiesConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))).withBefore(before), null);
+				}
 			};
 		} catch (RuntimeException e) {
 			return new Applied(new OpResult(op, Status.FAILED, e.toString()), null);
@@ -929,6 +938,17 @@ public final class ApplyExecutor {
 		return SodiumConfigPatcher.patchFile(path, patches)
 				? new OpResult(op, Status.OK, "Patched " + patches.size() + " value(s) in " + path.getFileName())
 				: new OpResult(op, Status.SKIPPED_ALREADY_DONE, path.getFileName() + " already has these values");
+	}
+
+	// The op's keys with the values the file has now (OpResult.before).
+	private static Map<String, String> valuesBefore(Op op, Map<String, String> file) {
+		Map<String, String> out = new LinkedHashMap<>();
+		patchesOf(op).keySet().forEach(key -> {
+			if (file.get(key) != null) {
+				out.put(key, file.get(key));
+			}
+		});
+		return out;
 	}
 
 	private static Map<String, String> patchesOf(Op op) {
