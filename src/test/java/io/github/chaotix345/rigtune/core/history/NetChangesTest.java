@@ -30,8 +30,13 @@ class NetChangesTest {
 
 	// One switch: its op, applied by the helper, and its journal entry (before -> after, chained on the staged values).
 	private Op patch(Path file, String key, String before, String after) {
+		return patch(file, key, before, after, null);
+	}
+
+	// As above, with what the helper found in the file before the op (OpResult.before; null: a 0.5.x helper's result).
+	private Op patch(Path file, String key, String before, String after, Map<String, String> inFile) {
 		Op op = file == DH ? Op.patchToml(file, Map.of(key, after)) : Op.patchJson(file, Map.of(key, after));
-		results.add(new OpResult(op, Status.OK, "ok"));
+		results.add(new OpResult(op, Status.OK, "ok", null, inFile));
 		String prefix = file == DH ? "dh." : "sodium.";
 		entries.add(new JournalEntry("e-" + entries.size(), "2026-11-07T00:00:00Z", JournalEntry.APPLY, "0.5.2", "26.2", null,
 				List.of(JournalChange.setting(prefix + key, before, after, JournalChange.APPLIED, op.id()))));
@@ -97,6 +102,48 @@ class NetChangesTest {
 		assertTrue(PendingNet.changesSomething(List.of(Op.patchJson(SODIUM, Map.of(DEFER, "\"ALWAYS\""))), (op, key) -> disk.get(key)));
 		assertFalse(PendingNet.changesSomething(List.of(Op.patchToml(DH, Map.of(RADIUS, "256.0"))), (op, key) -> disk.get(key)));
 		patch(SODIUM, DEFER, "ALWAYS", "always");
+		assertEquals(new ApplyResult.Counts(1, 0, 0), counts());
+	}
+
+	// SodiumConfigPatcher reads a boolean field's true/false in any case, so "TRUE" over the file's true writes nothing.
+	// The TOML and properties patchers write the text as it is.
+	@Test
+	void sodiumBooleansIgnoreCaseOtherFilesDoNot() {
+		String culling = "performance.use_entity_culling";
+		String enable = "enableShaders";
+		Map<String, String> disk = Map.of(culling, "true", RADIUS, "true", enable, "true");
+		assertFalse(PendingNet.changesSomething(List.of(Op.patchJson(SODIUM, Map.of(culling, "TRUE"))), (op, key) -> disk.get(key)));
+		assertTrue(PendingNet.changesSomething(List.of(Op.patchToml(DH, Map.of(RADIUS, "TRUE"))), (op, key) -> disk.get(key)));
+		assertTrue(PendingNet.changesSomething(List.of(Op.patchProperties(Path.of("config", "iris.properties"), Map.of(enable, "TRUE"))),
+				(op, key) -> disk.get(key)));
+		patch(SODIUM, culling, "true", "TRUE");
+		assertEquals(new ApplyResult.Counts(0, 0, 0), counts());
+	}
+
+	// A -> B -> A over a file that didn't have the key: the helper created it, a change. Only a 0.5.x helper's result,
+	// which records nothing, falls back to the journal's before.
+	@Test
+	void aKeyTheFileLackedCountsUnlessTheHelperRecordedNothing() {
+		patch(SODIUM, DEFER, "ALWAYS", "ONE_FRAME", Map.of());
+		patch(SODIUM, DEFER, "ONE_FRAME", "ALWAYS", Map.of());
+		assertEquals(new ApplyResult.Counts(1, 0, 0), counts());
+		results.clear();
+		entries.clear();
+		patch(SODIUM, DEFER, "ALWAYS", "ONE_FRAME");
+		patch(SODIUM, DEFER, "ONE_FRAME", "ALWAYS");
+		assertEquals(new ApplyResult.Counts(0, 0, 0), counts());
+	}
+
+	// The file had C, so C is the baseline. Had it B, the value the op writes, the helper may have written it itself
+	// before it was killed, so the journal's before is the baseline.
+	@Test
+	void theRecordIsTheBaselineUnlessItIsTheValueTheOpWrites() {
+		patch(SODIUM, DEFER, "ALWAYS", "ONE_FRAME", Map.of(DEFER, "ZERO_FRAMES"));
+		patch(SODIUM, DEFER, "ONE_FRAME", "ALWAYS", Map.of(DEFER, "ONE_FRAME"));
+		assertEquals(new ApplyResult.Counts(1, 0, 0), counts());
+		results.clear();
+		entries.clear();
+		patch(SODIUM, DEFER, "ALWAYS", "ONE_FRAME", Map.of(DEFER, "ONE_FRAME"));
 		assertEquals(new ApplyResult.Counts(1, 0, 0), counts());
 	}
 }

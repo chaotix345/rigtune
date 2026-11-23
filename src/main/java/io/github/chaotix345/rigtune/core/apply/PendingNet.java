@@ -33,10 +33,17 @@ public final class PendingNet {
 		for (Map.Entry<List<String>, Map.Entry<Op, String>> e : last.entrySet()) {
 			String disk = onDisk.apply(e.getValue().getKey(), e.getKey().get(2));
 			String staged = e.getValue().getValue();
-			if (disk == null || staged == null || !SettingValues.sameInFile(disk, staged)) {
+			if (disk == null || staged == null || !sameInFile(e.getValue().getKey().type(), disk, staged)) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	// As the op's patcher compares them: SettingValues.sameInFile, and for a PATCH_JSON true/false in any case, since
+	// SodiumConfigPatcher reads a boolean field's value that way (TOML and properties write the text as it is).
+	public static boolean sameInFile(PendingActions.Type type, String a, String b) {
+		return SettingValues.sameInFile(a, b) || type == PendingActions.Type.PATCH_JSON && a != null && b != null
+				&& (a.equalsIgnoreCase("true") || a.equalsIgnoreCase("false")) && a.equalsIgnoreCase(b);
 	}
 }
