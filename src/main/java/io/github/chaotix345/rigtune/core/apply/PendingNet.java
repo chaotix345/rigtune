@@ -33,7 +33,7 @@ public final class PendingNet {
 		for (Map.Entry<List<String>, Map.Entry<Op, String>> e : last.entrySet()) {
 			String disk = onDisk.apply(e.getValue().getKey(), e.getKey().get(2));
 			String staged = e.getValue().getValue();
-			if (disk == null || staged == null || !SettingValues.same(disk, staged)) {
+			if (disk == null || staged == null || !SettingValues.sameInFile(disk, staged)) {
 				return true;
 			}
 		}

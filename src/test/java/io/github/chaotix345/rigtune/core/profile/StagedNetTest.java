@@ -99,6 +99,30 @@ class StagedNetTest {
 		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
 	}
 
+	// A -> B -> A, then the player picks C in Sodium's own screen before quitting: the helper puts A back over C, which is
+	// a change, though the journal's chain starts and ends on A.
+	@Test
+	void anOutsideEditTheHelperOverwritesCounts() throws IOException {
+		switchTo(Map.of(DEFER, "ALWAYS"), "e1");
+		switchTo(Map.of(DEFER, "ONE_FRAME"), "e2");
+		editOutside("ZERO_FRAMES");
+		assertTrue(pending());
+		assertEquals(new ApplyResult.Counts(1, 0, 0), helperRuns());
+	}
+
+	// A -> B, then the player picks B in Sodium's screen: the helper finds B already there, so nothing changed.
+	@Test
+	void anOutsideEditToTheStagedValueCountsNothing() throws IOException {
+		switchTo(Map.of(DEFER, "ALWAYS"), "e1");
+		editOutside("ALWAYS");
+		assertFalse(pending());
+		assertEquals(new ApplyResult.Counts(0, 0, 0), helperRuns());
+	}
+
+	private void editOutside(String defer) throws IOException {
+		Files.writeString(sodium, "{\"performance\":{\"chunk_build_defer_mode\":\"" + defer + "\",\"use_entity_culling\":true}}", StandardCharsets.UTF_8);
+	}
+
 	private boolean pending() throws IOException {
 		return PendingNet.changesSomething(PendingActions.load(pendingFile).ops(), (op, keyInFile) -> file().get("sodium." + keyInFile));
 	}

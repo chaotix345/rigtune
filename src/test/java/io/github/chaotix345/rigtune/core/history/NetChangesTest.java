@@ -86,4 +86,17 @@ class NetChangesTest {
 		assertTrue(PendingNet.changesSomething(List.of(Op.disableFile(Path.of("mods", "x.jar"))), (op, key) -> disk.get(key)), "a mod file");
 		assertFalse(PendingNet.changesSomething(List.of(), (op, key) -> disk.get(key)));
 	}
+
+	// The patchers write a value's text as it is and compare it case-sensitively, and the mods read it that way (Sodium's
+	// enums through Gson, Iris's shaderPack as a file name), so a value that differs only in case or quotes is a change.
+	// Numbers still compare by value.
+	@Test
+	void caseAndQuotesAreChangesNumbersCompareByValue() {
+		Map<String, String> disk = Map.of(RADIUS, "256", DEFER, "ALWAYS");
+		assertTrue(PendingNet.changesSomething(List.of(Op.patchJson(SODIUM, Map.of(DEFER, "always"))), (op, key) -> disk.get(key)));
+		assertTrue(PendingNet.changesSomething(List.of(Op.patchJson(SODIUM, Map.of(DEFER, "\"ALWAYS\""))), (op, key) -> disk.get(key)));
+		assertFalse(PendingNet.changesSomething(List.of(Op.patchToml(DH, Map.of(RADIUS, "256.0"))), (op, key) -> disk.get(key)));
+		patch(SODIUM, DEFER, "ALWAYS", "always");
+		assertEquals(new ApplyResult.Counts(1, 0, 0), counts());
+	}
 }

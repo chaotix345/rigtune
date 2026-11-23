@@ -71,6 +71,23 @@ public final class SettingValues {
 		return na.equals(nb);
 	}
 
+	// As a config file holds them: the patchers write a value's text as it is and compare it case-sensitively, and the mods
+	// read it that way (Sodium's enums through Gson, Iris's shaderPack as a file name), so case and quotes count. Numbers
+	// compare by value ("256" = "256.0").
+	public static boolean sameInFile(String a, String b) {
+		if (a == null || b == null) {
+			return a == b;
+		}
+		if (a.equals(b)) {
+			return true;
+		}
+		try {
+			return new BigDecimal(a.trim()).compareTo(new BigDecimal(b.trim())) == 0;
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
 	static BigDecimal number(String value) {
 		if (value == null) {
 			return null;

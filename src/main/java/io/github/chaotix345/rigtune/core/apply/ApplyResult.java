@@ -20,9 +20,19 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 	}
 
 	// resultPath (0.2): where the file ended up (the actual .disabled name of a disable). 0.1.x readers ignore it.
-	public record OpResult(PendingActions.Op op, Status status, String message, String resultPath) {
+	// before (0.6): a config patch's keys (as in the file) with the values the file had just before this op ran, for the
+	// launch toast's count (NetChanges); a key the file didn't have is left out. Null for other ops and in older results.
+	public record OpResult(PendingActions.Op op, Status status, String message, String resultPath, Map<String, String> before) {
+		public OpResult(PendingActions.Op op, Status status, String message, String resultPath) {
+			this(op, status, message, resultPath, null);
+		}
+
 		public OpResult(PendingActions.Op op, Status status, String message) {
-			this(op, status, message, null);
+			this(op, status, message, null, null);
+		}
+
+		public OpResult withBefore(Map<String, String> values) {
+			return new OpResult(op, status, message, resultPath, values);
 		}
 	}
 
