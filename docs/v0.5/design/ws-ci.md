@@ -314,8 +314,10 @@ comparison and the listener inventory: docs/v0.5/verification/footprint/README.m
   because its returning value reached 298 of 300 ms); the wall-time keys keep their budgets. Moving preLaunch's history
   reconcile off the render thread is a v0.6 item.
 - PERF-6 FIXED: the C16 toast-wait and WS-L2 leftover listeners have their own keys (above).
-- PERF-7 UNVERIFIED: whether Distant Horizons' `graphics().renderingEnabled()` allocates. The repository has only DH's API
-  jar (interfaces, compileOnly); the implementation that would allocate isn't in it, and CI runs without DH (X9).
+- PERF-7 FIXED in 0.6.0 (fix/v06-backlog-stutter): Distant Horizons' `graphics().renderingEnabled()` does allocate (DH core
+  main, `DhApiGraphicsConfig`: a new `DhApiConfigValue` and converter on every call; its `getValue` reads the config entry
+  live). DhCompat keeps one per `DhApi.Delayed.configs` instance (DhCompatTest, red: built on every call). CI still runs
+  without DH (X9), so StutterGameTest's 0-byte check still doesn't reach this branch.
 - PERF-8 measured locally, not changed (HardwareProbe is WS-W's): `PerfCounters.detect` on this Windows 11 PC through
   `WindowsRegistry`, in a fresh JVM (a JUnit harness in a build slot, not committed): 92.7 ms for the first call (JNA's
   Advapi32 binding and classes loaded then), 0.43 ms median and 0.75 ms max for the next 20. In the game OSHI has usually

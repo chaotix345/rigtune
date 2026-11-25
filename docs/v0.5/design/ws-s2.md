@@ -474,9 +474,11 @@ old code for the stated reason first.
 - **STUTTER-8 (L), FIXED 7c1bf887**: a hold stands only while the key's current value is the fix's target
   (`FixHold.Hold.staged` keeps it for a fix waiting for the restart) (FixHoldTest `noHoldOnceTheValueChangedByHand`, red:
   held).
-- **STUTTER-9 (L), NOT FIXED**: the AFK onset's up to 0.5 s of throttled frames before SettingsWatch's check notices
-  (one hitch per AFK break, on both sides alike) needs an IDLE event dated at the previous check and the analyzer to drop
-  the spikes in between: WS-S's SettingsWatch and analyzer, not a cheap change. Residual.
+- **STUTTER-9 (L), FIXED in 0.6.0 (fix/v06-backlog-stutter)**: the AFK onset's up to 0.5 s of throttled frames before
+  SettingsWatch's check noticed (one hitch per AFK break, on both sides alike). Vanilla's AFK limit starts exactly 60 s
+  after `FramerateLimitTracker.latestInputTime` (read through `FramerateLimitTrackerAccessor`), so the check marks idle
+  1 s before it (`SettingsWatch.afkSoon`) and no analyzer change is needed (StutterIdleTest
+  `theAfkOnsetIsExcludedBeforeItsFirstThrottledFrame`, red: not excluded at the last tick before the throttle).
 - **STUTTER-10 (L), NOT FIXED**: counting "a setting changed and back" in an after session needs a whole-capture count of
   SETTINGS_CHANGED events (the event ring wraps like the sample ring) that leaves out the immediate fix's own change (its
   event lands in the restarted session, dated before its start). Not cheap or safe for a low. Residual; the start/end
