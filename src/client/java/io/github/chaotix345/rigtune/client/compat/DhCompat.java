@@ -87,4 +87,10 @@ final class DhCompat {
 		}
 		return value;
 	}
+
+	// DhCompatTest.
+	static void forgetRendering() {
+		rendering = null;
+		renderingFor = null;
+	}
 }

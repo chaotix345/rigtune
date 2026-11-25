@@ -143,8 +143,14 @@ final class SettingsWatch {
 		FramerateLimitTracker tracker = minecraft.getFramerateLimitTracker();
 		long sinceInput = minecraft.options.inactivityFpsLimit().get() == InactivityFpsLimit.AFK
 				? Util.getMillis() - ((FramerateLimitTrackerAccessor) tracker).rigtune$latestInputTime() : -1;
-		return afkSoon(sinceInput)
-				|| throttled(tracker.getThrottleReason(), tracker.getFramerateLimit(), minecraft.options.framerateLimit().get(), minecraft.isWindowActive());
+		return throttled(sinceInput, tracker.getThrottleReason(), tracker.getFramerateLimit(), minecraft.options.framerateLimit().get(),
+				minecraft.isWindowActive());
+	}
+
+	// The whole decision, free of Minecraft's objects (StutterIdleTest); sinceInputMillis: -1 when the AFK limit is off.
+	static boolean throttled(long sinceInputMillis, FramerateLimitTracker.FramerateThrottleReason reason, int limitInEffect, int playersLimit,
+			boolean windowActive) {
+		return afkSoon(sinceInputMillis) || throttled(reason, limitInEffect, playersLimit, windowActive);
 	}
 
 	static final long AFK_MILLIS = 60_000;

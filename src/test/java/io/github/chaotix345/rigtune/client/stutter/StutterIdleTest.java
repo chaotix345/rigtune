@@ -54,7 +54,7 @@ class StutterIdleTest {
 				excluded = idle;
 				if ((tick + phase) % SettingsWatch.THROTTLE_EVERY_TICKS == 0) {
 					FramerateThrottleReason reason = sinceInput > 60_000 ? FramerateThrottleReason.SHORT_AFK : FramerateThrottleReason.NONE;
-					idle = SettingsWatch.afkSoon(sinceInput) || SettingsWatch.throttled(reason, 120, 120, true);
+					idle = SettingsWatch.throttled(sinceInput, reason, 120, 120, true);
 				}
 			}
 			assertTrue(excluded, "phase " + phase + ": excluded by the last tick before the throttle");

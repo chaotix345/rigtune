@@ -22,6 +22,7 @@ class DhCompatTest {
 	@AfterEach
 	void reset() {
 		DhApi.Delayed.configs = null;
+		DhCompat.forgetRendering();
 	}
 
 	@Test
