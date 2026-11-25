@@ -69,11 +69,22 @@ final class DhCompat {
 		}
 	}
 
+	// review-11 PERF-7: renderingEnabled() builds a new wrapper and converter on every call (DH core's DhApiGraphicsConfig),
+	// and the wrapper reads DH's config entry on each getValue, so one is kept per configs instance.
+	private static @Nullable IDhApiConfig renderingFor;
+	private static @Nullable IDhApiConfigValue<Boolean> rendering;
+
 	private static IDhApiConfigValue<Boolean> rendering() {
 		IDhApiConfig configs = DhApi.Delayed.configs;
 		if (configs == null) {
 			throw new IllegalStateException("Distant Horizons is not initialised yet");
 		}
-		return configs.graphics().renderingEnabled();
+		IDhApiConfigValue<Boolean> value = rendering;
+		if (value == null || renderingFor != configs) {
+			value = configs.graphics().renderingEnabled();
+			rendering = value;
+			renderingFor = configs;
+		}
+		return value;
 	}
 }

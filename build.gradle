@@ -103,9 +103,11 @@ tasks.matching { it.name == "runBenchmarkAutorun" }.configureEach {
 }
 
 // Distant Horizons and Iris are optional at runtime: only client/compat/DhCompat and IrisCompat use their APIs, and
-// only after FabricLoader says the mod is loaded (the benchmark's cost reports).
+// only after FabricLoader says the mod is loaded (the benchmark's cost reports). DhCompatTest drives DhCompat against
+// stubs of DH's API interfaces, so the unit tests have the API jar.
 dependencies {
 	compileOnly "maven.modrinth:distanthorizonsapi:${project.dh_api_version}"
+	testImplementation "maven.modrinth:distanthorizonsapi:${project.dh_api_version}"
 	compileOnly("maven.modrinth:iris:${project.iris_version}") {
 		transitive = false
 	}

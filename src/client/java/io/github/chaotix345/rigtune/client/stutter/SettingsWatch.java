@@ -3,12 +3,15 @@ package io.github.chaotix345.rigtune.client.stutter;
 import com.mojang.blaze3d.platform.FramerateLimitTracker;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.compat.OptionalMods;
+import io.github.chaotix345.rigtune.client.mixin.FramerateLimitTrackerAccessor;
 import io.github.chaotix345.rigtune.core.benchmark.Throttle;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.InactivityFpsLimit;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Util;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.ref.WeakReference;
@@ -134,9 +137,22 @@ final class SettingsWatch {
 	// v0.5 RW-17: the game throttles its frame rate: vanilla's limiter gives a reason (AFK after 60 s without input,
 	// minimised, a menu outside a level), or the limit in effect is below the player's own, which is how Dynamic FPS shows
 	// (the benchmark's own Throttle check, reused). Every value read is a field or an enum constant: nothing allocated.
+	// review-11 STUTTER-9: vanilla's AFK limit starts exactly AFK_MILLIS after the last input, so idle starts AFK_LEAD_MILLIS
+	// before it (more than one check apart plus StutterHooks' tick behind), and the first 30 FPS frames are never gameplay.
 	static boolean throttled(Minecraft minecraft) {
 		FramerateLimitTracker tracker = minecraft.getFramerateLimitTracker();
-		return throttled(tracker.getThrottleReason(), tracker.getFramerateLimit(), minecraft.options.framerateLimit().get(), minecraft.isWindowActive());
+		long sinceInput = minecraft.options.inactivityFpsLimit().get() == InactivityFpsLimit.AFK
+				? Util.getMillis() - ((FramerateLimitTrackerAccessor) tracker).rigtune$latestInputTime() : -1;
+		return afkSoon(sinceInput)
+				|| throttled(tracker.getThrottleReason(), tracker.getFramerateLimit(), minecraft.options.framerateLimit().get(), minecraft.isWindowActive());
+	}
+
+	static final long AFK_MILLIS = 60_000;
+	static final long AFK_LEAD_MILLIS = 1_000;
+
+	// sinceInputMillis: -1 when the AFK limit is off.
+	static boolean afkSoon(long sinceInputMillis) {
+		return sinceInputMillis >= AFK_MILLIS - AFK_LEAD_MILLIS;
 	}
 
 	// The seam StutterIdleTest drives.

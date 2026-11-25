@@ -38,6 +38,29 @@ class StutterIdleTest {
 		assertTrue(SettingsWatch.throttled(FramerateThrottleReason.NONE, 15, 120, true), "a lower limit in effect (Dynamic FPS)");
 	}
 
+	// review-11 STUTTER-9: vanilla throttles to 30 FPS once the last input is over 60 s old, and the check runs every 10
+	// ticks, so its first throttled frames used to count as gameplay (one hitch per AFK break). The check now marks idle a
+	// little before that, so StutterHooks excludes the frames before the first throttled one, whatever the check's phase.
+	@Test
+	void theAfkOnsetIsExcludedBeforeItsFirstThrottledFrame() {
+		assertFalse(SettingsWatch.afkSoon(-1), "the AFK limit is off");
+		assertFalse(SettingsWatch.afkSoon(30_000));
+		for (int phase = 0; phase < SettingsWatch.THROTTLE_EVERY_TICKS; phase++) {
+			boolean idle = false;
+			boolean excluded = false;
+			for (long tick = 0; tick * 50 < 60_000; tick++) {
+				long sinceInput = tick * 50;
+				// StutterHooks' listener runs first and reads the idle flag SettingsWatch's set on an earlier tick.
+				excluded = idle;
+				if ((tick + phase) % SettingsWatch.THROTTLE_EVERY_TICKS == 0) {
+					FramerateThrottleReason reason = sinceInput > 60_000 ? FramerateThrottleReason.SHORT_AFK : FramerateThrottleReason.NONE;
+					idle = SettingsWatch.afkSoon(sinceInput) || SettingsWatch.throttled(reason, 120, 120, true);
+				}
+			}
+			assertTrue(excluded, "phase " + phase + ": excluded by the last tick before the throttle");
+		}
+	}
+
 	// The coordinator's case: 10 minutes of LONG_AFK frames (10 FPS) add no gameplay and no spike, and count as idle.
 	@Test
 	void tenMinutesOfLongAfkAddNoGameplayAndNoSpikes() {
