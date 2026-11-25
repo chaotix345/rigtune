@@ -29,7 +29,15 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## Release plan (6 Nov)
 1. **0.5.2**: released 7 Nov (see "Where it stands"). The next patch (0.5.3) only if a bug needs code; rules fixes ship on main without a release.
-2. **0.6.0, MC 26.4** (pre-approved 16 Nov, see "Approved by Charlie"). The port follows docs/v0.6/checklist.md (PR #101). HQ decides its four **Decide** items before the port merges. The main one: removing the 26.2 node would drop 26.2 from the live rules' availability (update_rules.py reads settings.gradle), so offline 0.5.2 players on 26.2 would see every mod as "availability not confirmed". The others: the 26.2-only E2E rows, build.yml's hardcoded `:26.2` steps, and the 26.4 OpenGL leg possibly starting Vulkan. Starts when 26.4 is released and Sodium and Iris support it (DESIGN.md: no pre-release nodes). The port is ~12 agent-hours: ~4 h compile port possible now, ~8 h after 26.4 pre-releases and Sodium/Iris builds (docs/research/v0.6/mc-26.4.md). Plus the v0.6 backlog in docs/PROGRESS.md (the preLaunch history reconcile is already off the render thread on main, PR #88; review-12/13 lows, STUTTER-9/10/11, PERF-7, the AC5.14 re-run), dropping 26.2 (Charlie, 16 Nov: 0.6.0 supports 26.3 and 26.4 only), and `loader_version` 0.20.1 (keep `"fabricloader": ">=0.19.5"`; CI's client game tests then cover the new loader; docs/research/fabric-loader-0.20.md).
+2. **0.6.0, MC 26.4** (pre-approved 16 Nov, see "Approved by Charlie"). **Started 25 Nov**, the day after 26.4-pre-1 (24 Nov; Fabric API 0.167.1+26.4 has a build for it, Sodium and Iris don't yet). The port follows docs/v0.6/checklist.md (PR #101) in two PRs. (Fable: port decisions, 25 Nov.)
+   - **PR A (now, worker below):** `src/` only, `>=26.4-alpha` blocks built against a throwaway 26.4-pre-1 node that isn't committed (the tools/MC_VERSIONS.md "Snapshot canary" flow, so it may merge before the release), plus `loader_version` 0.20.1 (keep `>=0.19.5`). It closes #49 once the canary goes green.
+   - **PR B (after 26.4's release, with Sodium and Iris builds):** swap the 26.2 node for 26.4, rewrite the blocks as `>=26.4`, regenerate the rules, and the four decisions:
+     1. The rules keep 26.2 through a rules-only list (`RULES_ONLY_VERSIONS = ("26.2",)` in update_rules.py) until the 26.5 port, so offline 0.5.2 players on 26.2 keep real availability. It must land in or before the node removal.
+     2. E2E: brand-theseus and both stale seeds move to 26.3; upgrade-from-0.1.0 and seeded-v010-dh are dropped; e2e_matrix.py fails loudly on a retired node.
+     3. build.yml: the `:26.2` E2E compile lines go, compat040/030 point at the +mc26.3 jars, and the 26.2-era downloads go.
+     4. The 26.4 OpenGL leg's backend gets pinned in options.txt.
+   - Deferred to 0.6.1: the review-12/13 lows. The OSHI smoke test runs on one launcher (Prism).
+   - Also still to do: STUTTER-9/10/11, PERF-7 and the AC5.14 re-run (docs/PROGRESS.md v0.6 backlog). 0.6.0 supports 26.3 and 26.4 only (Charlie, 16 Nov).
 
 ## Numbers
 | Date | Source | Number |
@@ -86,10 +94,10 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 - 2026-11-09: HQ makes the internal decisions and orchestrates on its own: which workers to start and when, backlog burns, reviews and merges (Charlie: "i'm authorising u to make those decisions and orchestrate urself"). Outward actions (releases beyond the pre-approved patch releases, Modrinth edits, comments or replies, contacting anyone, sign-ups, spend) still need his OK each time, per CLAUDE.md.
 
 ## Waiting on others
-- Mojang: MC 26.4 release (weekly snapshots, no date). Sodium and Iris: 26.4 builds.
+- Mojang: MC 26.4 release (26.4-pre-1 came out 24 Nov; no date). Sodium and Iris: 26.4 builds (none yet on 25 Nov).
 
 ## Dated reminders
-- 2026-11-24 (11:00 daily): open tonight's rules bot PR (expected about 19:30-21:30 Sydney on 23 Nov). Sodium 0.9.3 and Sodium Extra 0.9.6 became full releases for 26.3, so check whether any rule's stability or recommendation changes; if one does, it's a risky rules PR (Fable and Codex).
+- Every daily until 0.6.0 ships: check Mojang's manifest for 26.4 pre-releases, release candidates and the release, and Modrinth for Sodium and Iris 26.4 builds. Once 26.4 is released and both have builds, start PR B (Release plan).
 - 2026-12-09, 08:30-10:00: keep the PC free for Smoov HQ, which allocates Charlie's UTS classes in his Chrome at 09:00 (relayed by the coordinating thread, 19 Nov). Start no RigTune worker, gate or background job that would run in that window. **At all times: leave Chrome and its myTimetable tab alone.**
 - 2026-11-30 (then weekly): Krypton's stale jars (astei/krypton #169; open, no reply, newest jar still 0.3.2 of 30 Sep on 23 Nov). Once Krypton re-uploads jars with the #152 fix, remove the e4mc conflict from knowledge.json by hand (worker PR; PR #55 notes).
 
@@ -99,7 +107,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-None.
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:dad4c7e9d782ccf4a4fee5d64efac4ba1e2671013d090a995ea28c34848cdf6b> | `feat/port-264-a` | src/ (version blocks only), gradle.properties `loader_version`, docs/v0.6/checklist.md | Started 25 Nov: 0.6.0 port PR A against 26.4-pre-1 |
 
 Workers are on (Charlie, 9 Nov); HQ starts them as needed. From 16 Nov the PC restarts every night at 03:30: no worker or gate may be mid-run then. Evening workers must commit and push before 03:00 (state that in their briefs), and HQ starts no gate or background command that would still be running at 03:30.
 
@@ -121,6 +129,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-25 MC 26.4-pre-1 came out 24 Nov, and the 0.6.0 port has started: PR A (compile on 26.4-pre-1, loader 0.20.1) has a worker. The four port decisions are made (Release plan; Fable: port decisions). The 23 Nov rules bot found no content change (r24 stays). Quiet otherwise.
 - 2026-11-23 PR #101 merged: docs/v0.6/checklist.md and a draft `[Unreleased]` CHANGELOG section for 0.6.0. PR #102 merged (reaches users in 0.6.0): the launch toast's net-change count uses what the helper actually overwrote (a new nullable `before` per op in last-apply.json, still readable by 0.5.2), and PendingNet compares values the way each patcher does. Reviewed by Fable 5.2 (merge) and Codex gpt-6.1-sol (merge after fixes); their three shared findings were fixed before the merge. Both worker threads settled. docs/hq.md "Releasing" now names 0.6.0 as pre-approved.
 - 2026-11-23 Weekly review. A quiet week for users: no issues, Modrinth still under review, 0.5.x downloads flat. CI had 47 runs and no failures (5 superseded runs cancelled on main). Artifacts fell to 516 after PR #86. Charlie flew out 21 Nov. The daily runs every day again after the low-usage weekend. Two Backlog workers started (0.6.0 checklist, PR #63 nits), and the Backlog was refilled. Housekeeping: 2 merged worker branches deleted. No Fable pass this week: the priorities follow directly from the trip and the 26.4 wait.
 - 2026-11-20 Low-usage mode until the Mon 23 Nov 08:00 reset (Charlie at 18% of his weekly Claude usage): daily job Mon-Fri only, no Sunday backlog burn, and Monday's daily restores it (Dated reminders). Pre-trip: nothing open for Charlie from RigTune; HQ advised skipping his AMD driver update until after the trip. A quiet day otherwise.
