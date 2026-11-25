@@ -135,7 +135,9 @@ public class BenchmarkMenuScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 10, 0xFFFFFFFF);
 		int y = 24;

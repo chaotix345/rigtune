@@ -273,7 +273,9 @@ public class HistoryScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		graphics.centeredText(font, clip(Component.translatable("rigtune.history.subtitle"), width - 16), width / 2, 20, Palette.of(COLOR_LABEL));
@@ -487,6 +489,7 @@ public class HistoryScreen extends Screen {
 		}
 
 		@Override
+		//$ extract_entry
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			if (open || hovered) {
 				graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, Palette.of(open ? 0x30FFFFFF : 0x18FFFFFF));
@@ -544,6 +547,7 @@ public class HistoryScreen extends Screen {
 		}
 
 		@Override
+		//$ extract_entry
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			int x = getContentX() + 16;
 			int y = getContentY();

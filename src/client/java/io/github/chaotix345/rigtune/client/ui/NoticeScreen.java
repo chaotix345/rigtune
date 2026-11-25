@@ -134,7 +134,9 @@ public class NoticeScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		int left = margin();

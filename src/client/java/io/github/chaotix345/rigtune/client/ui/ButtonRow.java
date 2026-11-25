@@ -49,10 +49,12 @@ final class ButtonRow extends StutterScreen.Row {
 	}
 
 	@Override
+	//$ extract_entry
 	public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 		int x = getContentX();
 		for (Button b : buttons) {
 			b.setPosition(x, getContentY() + 1);
+			//$ extract_call b
 			b.extractRenderState(graphics, mouseX, mouseY, partialTick);
 			x += b.getWidth() + GAP;
 		}

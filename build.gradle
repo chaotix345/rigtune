@@ -4,6 +4,23 @@ plugins {
 
 // This script runs once per Minecraft version (versions/<mc>/), with that version's gradle.properties.
 def mcVersion = stonecutter.current.version
+
+// Swaps (a `//$ name` comment replaces the next line). 26.4 dropped the GUI extract pass's mouseX, mouseY and
+// partialTick parameters; they moved onto GuiGraphicsExtractor. On 26.4 the override reads them back into locals of the
+// same names, so the method bodies don't change. Rewrite these as plain code when 26.3 is dropped.
+def extractFromGraphics = stonecutter.eval(mcVersion, '>=26.4-alpha')
+def mouseLocals = 'int mouseX = graphics.mouseX(), mouseY = graphics.mouseY(); float partialTick = graphics.partialTicks();'
+stonecutter {
+	swaps['extract_screen'] = extractFromGraphics
+			? 'public void extractRenderState(GuiGraphicsExtractor graphics) { ' + mouseLocals
+			: 'public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {'
+	swaps['extract_entry'] = extractFromGraphics
+			? 'public void extractContent(GuiGraphicsExtractor graphics, boolean hovered) { ' + mouseLocals
+			: 'public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {'
+	swaps['extract_call'] = extractFromGraphics
+			? '$1.extractRenderState(graphics);'
+			: '$1.extractRenderState(graphics, mouseX, mouseY, partialTick);'
+}
 version = "${project.mod_version}+mc${mcVersion}"
 group = project.maven_group
 

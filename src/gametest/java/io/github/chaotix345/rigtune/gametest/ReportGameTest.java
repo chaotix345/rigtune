@@ -64,6 +64,9 @@ public class ReportGameTest implements FabricClientGameTest {
 					check(button.getX() >= 0 && button.getRight() <= screen.width && button.getBottom() <= screen.height,
 							"inside the screen at " + name + ": " + describe(button));
 					for (AbstractWidget w : Screens.getWidgets(screen)) {
+						//? if >=26.4-alpha {
+						/*check(w == button || !w.isVisible() || !overlaps(w, button), describe(w) + " overlaps " + describe(button) + " at " + name);
+						*///?} else
 						check(w == button || !w.visible || !overlaps(w, button), describe(w) + " overlaps " + describe(button) + " at " + name);
 					}
 				});
@@ -171,6 +174,9 @@ public class ReportGameTest implements FabricClientGameTest {
 
 	private static void checkLayout(Minecraft mc, String name) {
 		Screen screen = mc.gui.screen();
+		//? if >=26.4-alpha {
+		/*List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.isVisible()).toList();
+		*///?} else
 		List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
 		for (AbstractWidget w : widgets) {
 			check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,

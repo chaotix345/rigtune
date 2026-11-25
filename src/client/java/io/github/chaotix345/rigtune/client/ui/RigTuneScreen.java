@@ -668,10 +668,12 @@ public class RigTuneScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		if (minecraft.level != null) {
 			graphics.fill(0, 0, width, headerBottom, Palette.of(0x70000000));
 		}
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.text(font, title.copy().withStyle(ChatFormatting.BOLD), left, 11, 0xFFFFFFFF, true);
 		if (tierBadge != null) {
@@ -779,6 +781,7 @@ public class RigTuneScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentBottom() - 11;
 				graphics.text(font, label, getContentX(), y, Palette.of(color), true);
@@ -858,6 +861,7 @@ public class RigTuneScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int x = getContentX();
 				int y = getContentY();
@@ -871,6 +875,7 @@ public class RigTuneScreen extends Screen {
 					graphics.fill(x + 6, y + 1, x + 9, getY() + getHeight() - 4, accent);
 				} else {
 					checkbox.setPosition(x, y);
+					//$ extract_call checkbox
 					checkbox.extractRenderState(graphics, mouseX, mouseY, partialTick);
 				}
 				int titleColor = informational ? (recommendation.category() == Category.WARNING || recommendation.category() == Category.ADVICE ? accent : Palette.of(0xFFDDDDDD)) : 0xFFFFFFFF;

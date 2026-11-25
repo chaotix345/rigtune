@@ -242,7 +242,9 @@ public class RigTuneSettingsScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title, width / 2, 15, 0xFFFFFFFF);
 	}
@@ -291,8 +293,10 @@ public class RigTuneSettingsScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				widget.setPosition(getContentX(), getContentY());
+				//$ extract_call widget
 				widget.extractRenderState(graphics, mouseX, mouseY, partialTick);
 			}
 
@@ -321,6 +325,7 @@ public class RigTuneSettingsScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentY() + 2;
 				for (FormattedCharSequence line : lines) {

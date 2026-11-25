@@ -1280,6 +1280,9 @@ public class A11yGameTest implements FabricClientGameTest {
 	private static void benchLayout(ClientGameTestContext context, String name) {
 		context.runOnClient(mc -> {
 			net.minecraft.client.gui.screens.Screen screen = mc.gui.screen();
+			//? if >=26.4-alpha {
+			/*List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.isVisible()).toList();
+			*///?} else
 			List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
 			for (AbstractWidget w : widgets) {
 				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,
@@ -1537,6 +1540,9 @@ public class A11yGameTest implements FabricClientGameTest {
 		String shot = "settings-" + size[0] + "x" + size[1] + "-scale" + size[2];
 		boolean scrollable = context.computeOnClient(mc -> {
 			RigTuneSettingsScreen screen = (RigTuneSettingsScreen) mc.gui.screen();
+			//? if >=26.4-alpha {
+			/*List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.isVisible()).toList();
+			*///?} else
 			List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
 			for (AbstractWidget w : widgets) {
 				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height, name + ": " + w + " outside the screen");

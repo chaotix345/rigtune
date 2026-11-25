@@ -2,7 +2,10 @@
 
 One list for whoever ports RigTune to 0.6.0. Each item names where the detail lives, so you only open the source
 when you need it. Line numbers are from main on 2026-11-23 and will drift; search for the quoted text if one has moved.
-Items marked **Decide** are open questions the sources don't settle. Settle them with HQ before the port PR merges.
+The four **Decide** items were settled by HQ on 2026-11-25; each one's decision is recorded where it was asked.
+
+The port is two PRs. PR A (the compile port against 26.4-pre-1, `loader_version` 0.20.1, this checklist) is
+sections 4 and 5. PR B is the 26.2 drop: section 2 and the CI and E2E work the decisions below assign to it.
 
 Sources: [docs/research/v0.6/mc-26.4.md](../research/v0.6/mc-26.4.md) (the breaks),
 [docs/research/fabric-loader-0.20.md](../research/fabric-loader-0.20.md),
@@ -32,6 +35,18 @@ Charlie decided 0.6.0 supports 26.3 and 26.4 only; 0.5.2 stays on Modrinth for 2
 Charlie", 16 Nov). 26.2 is the committed version, so it moves with the drop (MC_VERSIONS.md "Dropping a version",
 DESIGN.md line 344).
 
+Rules (live on merge; CLAUDE.md "Hard rules"). Do this first:
+- [ ] **Decided (HQ, 25 Nov): keep 26.2 in the rules through a rules-only list, until the 26.5 port.** PR B adds
+      `RULES_ONLY_VERSIONS = ("26.2",)` to `tools/update_rules.py`, so the rules keep a 26.2 `availability` after the
+      node is gone. Why: `tools/update_rules.py` takes its target versions from `settings.gradle` (tools/README.md
+      "What it does" step 2), so without the list the next run, by hand or by the Monday bot, would write rules with
+      no 26.2 `availability`. Installed 0.5.2 on 26.2 still reads those rules; offline, a missing version makes every
+      mod count as available with "(availability not confirmed)" (`Recommender.java:517-529`, RULES_SCHEMA.md line
+      120). Online it asks Modrinth and isn't affected. `--mc-versions` in `update-rules.yml` was the alternative, but
+      it turns off hotfix discovery.
+- [ ] `rules/source/knowledge.json:375` (vulkanmod: "has no Minecraft 26.2 release") and `:1049` (mixintrace-reborn:
+      "no Fabric build for 26.2 or 26.3"): reword for 26.3 and 26.4 when you regenerate (section 8).
+
 Build and Stonecutter:
 - [ ] `settings.gradle:31` `versions '26.2', '26.3'`: remove `'26.2'`.
 - [ ] Move the committed state to 26.3, all three together: `settings.gradle:32` `vcsVersion`, `stonecutter.gradle:6`
@@ -51,14 +66,15 @@ Gradle project is gone:
 - [ ] `build.yml:167-175` compile the E2E drivers on `:26.2` against the 0.1.0 to 0.4.0 `+mc26.2` jars. Remove the
       `:26.2` lines; the `:26.3` lines stay, and add `:26.4` ones if the drivers should compile there too.
 - [ ] `build.yml:185-186` run `compat040.py` and `compat030.py` on the `+mc26.2` jars. `compat030.py:94` and
-      `compat040.py:30` expect those exact versions. These run no client, so the 26.2 jars may keep working with no
-      node. **Decide**: keep them, or move to the `+mc26.3` jars (their sha256s are already pinned at `build.yml:137`
-      and `:139`) and update the two scripts and their tests.
+      `compat040.py:30` expect those exact versions. **Decided (HQ, 25 Nov), PR B:** delete the `:26.2` E2E compile
+      lines above, point compat040 and compat030 at the `+mc26.3` jars (their sha256s are already pinned at
+      `build.yml:137` and `:139`) with the two scripts and their tests, and drop the 26.2-era downloads.
 - [ ] `tools/e2e/e2e_matrix.py:31` `DEFAULT_NODE = "26.2"`. The matrix builds rows only for nodes in `versions/`
-      (`gametest_matrix.nodes`), so these release-tier rows disappear without an error: `upgrade-from-0.1.0`, the
-      `v010-dh` seed, both stale seeds, and `brand-theseus` (`:93`). **Decide**: move the seed and brand rows to 26.3
-      (the seeds name `+mc26.2` mod jars, e.g. `tools/e2e/seeds/v010-dh/last-apply.json:7`), or accept the loss. The
-      0.1.0 upgrade can't move: 0.1.0 was built for 26.2 only.
+      (`gametest_matrix.nodes`), so these release-tier rows would disappear without an error: `upgrade-from-0.1.0`,
+      the `v010-dh` seed, both stale seeds, and `brand-theseus` (`:93`). **Decided (HQ, 25 Nov), PR B:** move
+      `brand-theseus` and both stale seeds to 26.3 (the seeds name `+mc26.2` mod jars), drop `upgrade-from-0.1.0`
+      (0.1.0 was built for 26.2 only) and `seeded-v010-dh`, and make `e2e_matrix.py` fail loudly when a row names a
+      retired node (a `RETIRED` set) instead of dropping it.
 - [ ] `tools/e2e/self_update_e2e.py:56-60` (`RELEASED` keeps the 26.2 jars; fine if unused) and `:1538` (`--mc`
       defaults to `26.2`).
 - [ ] `tools/ci_streak.py:29` `REQUIRED_LEGS` names `"26.2, OpenGL"`. Replace it with the 26.4 legs.
@@ -67,17 +83,6 @@ Gradle project is gone:
       (`tools/tests/`). Most use fixtures and should pass unchanged; the gate shows which don't.
 - [ ] Java tests under `src/test/` with `"26.2` strings (about 20 files, e.g. `BenchmarkWorldTest`, `FabricPinsTest`).
       Most are fixture data; fix the ones `./gradlew build` fails.
-
-Rules (live on merge; CLAUDE.md "Hard rules"):
-- [ ] **Decide before the port merges.** `tools/update_rules.py` takes its target versions from `settings.gradle`
-      (tools/README.md "What it does" step 2). Once 26.2 is gone from main, the next run, by hand or by the Monday bot,
-      writes rules with no 26.2 `availability`. Installed 0.5.2 on 26.2 still reads those rules. Offline, a missing
-      version makes every mod count as available with "(availability not confirmed)" (`Recommender.java:517-529`,
-      RULES_SCHEMA.md line 120); online it asks Modrinth and isn't affected. To keep 26.2 covered, `update_rules.py`
-      needs a list of retired versions it still targets. `--mc-versions` in `update-rules.yml` would also work, but it
-      turns off hotfix discovery. Or accept the offline gap for 26.2.
-- [ ] `rules/source/knowledge.json:375` (vulkanmod: "has no Minecraft 26.2 release") and `:1049` (mixintrace-reborn:
-      "no Fabric build for 26.2 or 26.3"): reword for 26.3 and 26.4 when you regenerate (section 8).
 
 ## 3. Add the 26.4 node
 
@@ -92,32 +97,51 @@ Details and fix shapes: research doc "The breaks"; every error line: its appendi
 The canary found the same break categories on snapshot-8 and snapshot-10 (STATUS.md "Where it stands", Recent changes 19
 Nov), so expect the same list on the release and recheck the lines.
 
-- [ ] Rewrite the existing `//? if >=26.4-alpha` blocks as `>=26.4` (MC_VERSIONS.md "Version ranges"):
-      `BenchmarkWorld.java:330`, `BenchmarkGameTest.java:337`. With 26.2 gone, every `else` branch means 26.3.
-- [ ] Break 1, the extract pass lost `mouseX, mouseY, partialTick` (88 of 99 errors): research §1. Shared helpers
-      instead of 45 conditionals: `RigTuneScreenBase` for the 19 screens, `RowEntry` for the 22 entries, one block each
-      in `RowList.extractItem` and `RowFocus.extractWidgetRenderState`, and `Widgets.extract` for the three direct calls.
-- [ ] Break 2, `AbstractWidget.visible` is protected: research §2. `RigTuneClient:295`, `:318`, via `Widgets.visible`.
-- [ ] Break 3, `FormattedText.getString(int)`: research §3. `BenchmarkResultScreen:402`, `StutterScreen:713`, `:716`,
-      via `Texts.plain`.
-- [ ] Break 4, the `HudElement` lambda lost `DeltaTracker`: research §4. `RigTuneClient:100`.
-- [ ] Break 5, `CycleButton` split: research §5. No source change; the recompile fixes it.
-- [ ] Break 6, OSHI 7.7.2 dropped `oshi.SystemInfo`: research §6. `HardwareProbe:188`, `PowerWatcher:127`, through
-      one `Oshi.hardware()` helper. Minecraft still bundles OSHI, so add no dependency.
-- [ ] `python tools/mc_apidiff.py 26.3 26.4 --out build/apidiff` and review every changed class (MC_VERSIONS.md
-      "`tools/mc_apidiff.py`"). Known items to check (research "Other changes to review"): the `Options` keys
-      (`key.otherPlayers`, the new `preferDXGIPresent`), Vulkan as the default renderer, `isHighlighted()`,
-      `GuiPipeline`, and `KeyEvent`'s `repeat`.
+- [ ] Rewrite every `//? if >=26.4-alpha` block as `>=26.4` (MC_VERSIONS.md "Version ranges"), and the
+      `'>=26.4-alpha'` in `build.gradle`'s `extractFromGraphics`: `BenchmarkWorld.java:330`,
+      `BenchmarkGameTest.java:337` and PR A's blocks (`git grep -- '>=26.4-alpha'`). With 26.2 gone, every `else`
+      branch means 26.3.
+- [x] PR A did breaks 1 to 6 against 26.4-pre-1 with `//? if >=26.4-alpha` blocks and Stonecutter swaps, not the
+      helper classes the research suggested: 26.2 and 26.3 compile to the same bytecode as before (only line-number
+      tables move). Details in PR A's description.
+- [x] Break 1, the extract pass lost `mouseX, mouseY, partialTick`: research §1. Three swaps declared in
+      `build.gradle` (`extract_screen` for the 19 screen overrides, `extract_entry` for the 22 list entries,
+      `extract_call <target>` for the 19 `super` calls and the three direct widget calls). On 26.4 the override
+      reads the three values from `graphics` into locals of the same names, so no method body changes. One
+      `//? if` block each in `RowList.extractItem` and `RowFocus.extractWidgetRenderState`.
+- [x] Break 2, `AbstractWidget.visible` is protected: research §2. `isVisible()` on 26.4 in `RigTuneClient` (2) and
+      13 game-test lines (11 files) the snapshot-7 survey couldn't reach because `client` didn't compile.
+- [x] Break 3, `FormattedText.getString(int)`: research §3. `BenchmarkResultScreen` (1) and `StutterScreen` (2) pass
+      `FormattedText.DEFAULT_MAX_ITERATION` on 26.4.
+- [x] Break 4, the `HudElement` lambda lost `DeltaTracker`: research §4. `RigTuneClient`.
+- [x] Break 5, `CycleButton` split: research §5. No source change; the recompile fixes it.
+- [x] Break 6, OSHI 7.7.2 dropped `oshi.SystemInfo`: research §6. `SystemInfoFactory.create().getHardware()` on 26.4
+      in `HardwareProbe` and `PowerWatcher`. Minecraft still bundles OSHI, so no dependency was added.
+- [x] New on 26.4-pre-1 (not in the survey): `KeyEvent` gained a `repeat` component, which breaks
+      `RowFocusTest`'s three `new KeyEvent(...)` (unit tests only).
+- [ ] On the release: rerun `./gradlew :26.4:build` and `python tools/mc_apidiff.py 26.3 26.4 --out build/apidiff`, and
+      review every changed class (MC_VERSIONS.md "`tools/mc_apidiff.py`"). Known items to check (research "Other changes
+      to review"): the `Options` keys (`key.otherPlayers`, the new `preferDXGIPresent`), Vulkan as the default renderer,
+      `isHighlighted()` and `GuiPipeline`. PR A ran it against 26.4-pre-1: every MISSING or CHANGED reference was one of
+      the breaks above (plus the two renames the `>=26.4-alpha` blocks already handle); reflection targets
+      (`Options$FieldAccess`, `graphicsPreset`, `processOptions`) and the mixin targets still resolve; the `Options`
+      strings changed as the research says (`key.otherPlayers`, `preferDXGIPresent`, plus `improvedFog`); the removed
+      `"unknown"` and `"empty"` strings are coincidences (OSHI 7's power sources still report `"unknown"`, which the
+      battery filter relies on).
 - [ ] Compile the E2E drivers on `:26.4` (`compileE2eJava`, `compileE2eUndoJava`, `compileE2eDowngradeJava`). The
-      survey didn't check them (research "Other changes to review", last bullet).
+      survey didn't check them (research "Other changes to review", last bullet). PR A: `compileE2eUndoJava`,
+      `compileE2eJava` (against the 0.4.0+mc26.3 jar) and `compileE2eDowngradeJava` (against 0.3.0+mc26.3) compile on
+      26.4-pre-1 unchanged. Recheck on the release node.
 
 ## 5. Loader and Fabric API
 
-- [ ] `gradle.properties:10` `loader_version=0.19.5` becomes `0.20.1`. Keep `"fabricloader": ">=0.19.5"` in
+- [x] `gradle.properties:10` `loader_version=0.19.5` becomes `0.20.1` (PR A). Keep `"fabricloader": ">=0.19.5"` in
       `src/main/resources/fabric.mod.json:36` (fabric-loader-0.20.md "Options and costs", option 1). Add no extra
       CI leg.
-- [ ] Check Fabric API for 26.4's own `fabricloader` requirement. If it needs more than 0.19.5, revisit option 3
-      (fabric-loader-0.20.md).
+- [x] Check Fabric API for 26.4's own `fabricloader` requirement. 0.167.1+26.4 (for 26.4-pre-1) and its modules
+      declare `"fabricloader": ">=0.20.0"`. Option 3 (raise RigTune's minimum) still gains nothing: on 26.4, Fabric API
+      already makes Loader enforce 0.20, and raising ours would only turn away 26.3 players on Loader 0.19.x. Kept
+      `>=0.19.5` (HQ's decision, 25 Nov). Recheck on the stable 26.4 Fabric API.
 - [ ] `versions/26.3/gradle.properties` pins Fabric API `0.161.0+26.3`; move it to the newest 26.3 build
       (0.166.2+26.3 on 16 Nov; STATUS.md "Where it stands", Ecosystem). Consider Sodium, Iris and Mod Menu there too.
 
@@ -127,8 +151,8 @@ STATUS.md "Release plan" item 2 folds these into 0.6.0, but they aren't conditio
 which ones ship. Source: PROGRESS.md "v0.6 backlog" (lines 42-47), plus STATUS.md "Backlog".
 
 - [x] The preLaunch history reconcile off the render thread: done in PR #88 (on main since 16 Nov).
-- [ ] The review-12/13 lows: R12FEAT-2..9, R12X-4/5, R12APPLY-4, R12REL-3/5/6, R12STUTTER-4/5/7, R13-2
-      (docs/reviews/review-12.md, review-13.md). Triage which still apply on main first.
+- [ ] Deferred to 0.6.1 (HQ, 25 Nov): the review-12/13 lows, R12FEAT-2..9, R12X-4/5, R12APPLY-4, R12REL-3/5/6,
+      R12STUTTER-4/5/7, R13-2 (docs/reviews/review-12.md, review-13.md). Triage which still apply on main first.
 - [ ] STUTTER-9, STUTTER-10, STUTTER-11 (docs/reviews/review-11/STUTTER.md; status in docs/v0.5/design/ws-s2.md
       lines 477-484) and PERF-7 (docs/reviews/review-11/PERF.md; docs/v0.5/design/ws-ci.md line 317).
 - [ ] The AC5.14 re-run under the fresh-baseline C20 flow (docs/v0.5/SPEC.md line 643). It was specified on 26.2,
@@ -149,12 +173,16 @@ All Gradle runs go through the gate queue as background commands (docs/hq.md "Th
 - [ ] CI's game-test legs come from `versions/` (`tools/gametest_matrix.py`), so they become 26.3 and 26.4, each on
       OpenGL and Vulkan, with no workflow edit. Check that the 26.4 OpenGL leg really runs OpenGL. 26.4 defaults to
       Vulkan, and a step fails any leg whose `latest.log` names the wrong backend (DESIGN.md "Client game tests in CI";
-      the `SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER` comment at `build.yml:249-252`).
+      the `SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER` comment at `build.yml:249-252`). **Decided (HQ, 25 Nov), PR B:** pin the
+      backend in each leg's `options.txt` once the option key is confirmed from the `mc_apidiff` `Options` dump.
+      Found in PR A's apidiff on 26.4-pre-1: `Options.processOptions` saves it as `preferredGraphicsBackend`
+      (`PreferredGraphicsApi`: `default`, `opengl`, `vulkan`; an enum codec, so the line should read
+      `preferredGraphicsBackend:"opengl"`). Check one written `options.txt` before relying on the quoting.
 - [ ] Footprint budgets on the new legs (`tools/footprint-budgets.json`). Ceilings, CPU-ms, bytes, 0-allocation and
       leak checks stay strict (STATUS.md "Approved by Charlie", 27 Sep).
 - [ ] OSHI runtime checks on a real 26.4 client (research §6, "Runtime checks"): on Windows and Linux, GPU names, VRAM,
       CPU, memory and the battery filter read the same as on 26.3; a test asserts the card, CPU and RAM come from OSHI;
-      one smoke test each in Prism, MultiMC, ATLauncher and GDLauncher.
+      one smoke test in Prism (cut from four launchers by HQ, 25 Nov).
 - [ ] Production smoke test with Sodium, Iris and Distant Horizons on 26.4 (docs/smoke/README.md), and a benchmark
       with Sodium.
 - [ ] The E2E release tier runs in the dry run (section 10); check its rows after the section 2 decisions.
@@ -177,7 +205,7 @@ review plus the Codex second opinion.
 - [ ] README.md:10 (badge), :35, :36.
 - [ ] CONTRIBUTING.md:7, :12, :23 (the committed version), :51, and the CI legs at :17.
 - [ ] DESIGN.md "Porting to new MC versions" (the tree at line 321, the conditionals at 330) and "Client game tests in
-      CI".
+      CI". Mention the `extract_*` swaps PR A added to `build.gradle`, next to the `//? if` blocks.
 - [ ] tools/README.md:28, :34, :140. tools/MC_VERSIONS.md: add a results line for `26.3 -> 26.4` under "Results so
       far" if useful.
 - [ ] docs/guide: faq.md:7, jvm-memory.md:22. Leave verification.md and footprint.md: they describe what 0.4 and 0.5

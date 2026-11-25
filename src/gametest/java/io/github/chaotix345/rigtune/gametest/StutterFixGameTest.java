@@ -470,6 +470,9 @@ public class StutterFixGameTest implements FabricClientGameTest {
 			StutterScreen stutter = (StutterScreen) screen;
 			List<AbstractWidget> footer = new ArrayList<>();
 			for (var child : screen.children()) {
+				//? if >=26.4-alpha {
+				/*if (child instanceof Button b && b.isVisible()) {
+				*///?} else
 				if (child instanceof Button b && b.visible) {
 					footer.add(b);
 				}

@@ -432,7 +432,9 @@ public class PreviewScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		graphics.centeredText(font, clip(confirm != null ? confirm.subtitle() : Component.translatable("rigtune.preview.subtitle"), width - 16), width / 2, 20,
@@ -530,6 +532,7 @@ public class PreviewScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentY() + top;
 				for (FormattedCharSequence line : lines) {
