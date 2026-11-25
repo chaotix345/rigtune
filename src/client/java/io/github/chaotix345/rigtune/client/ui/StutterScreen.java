@@ -26,6 +26,9 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+//? if >=26.4-alpha {
+/*import net.minecraft.network.chat.FormattedText;
+*///?}
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
@@ -629,7 +632,9 @@ public class StutterScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		if (status != null && statusFitsHeader()) {
@@ -683,6 +688,7 @@ public class StutterScreen extends Screen {
 		}
 
 		@Override
+		//$ extract_entry
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			int y = getContentY() + top;
 			for (FormattedCharSequence line : lines) {
@@ -719,6 +725,7 @@ public class StutterScreen extends Screen {
 		}
 
 		@Override
+		//$ extract_entry
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			StutterList l = list;
 			int x = getContentX();
@@ -728,9 +735,15 @@ public class StutterScreen extends Screen {
 			int valueWidth = l == null ? width / 3 : l.valueColumn;
 			int barX = x + labelWidth + 4;
 			int barWidth = Math.max(MIN_BAR, width - labelWidth - valueWidth - 8);
+			//? if >=26.4-alpha {
+			/*graphics.text(font, font.substrByWidth(label, labelWidth).getString(FormattedText.DEFAULT_MAX_ITERATION), x, y, Palette.of(COLOR_TEXT), false);
+			*///?} else
 			graphics.text(font, font.substrByWidth(label, labelWidth).getString(), x, y, Palette.of(COLOR_TEXT), false);
 			graphics.fill(barX, y + 1, barX + barWidth, y + 8, Palette.of(COLOR_BAR_BG));
 			graphics.fill(barX, y + 1, barX + (int) Math.round(barWidth * share), y + 8, Palette.of(color));
+			//? if >=26.4-alpha {
+			/*graphics.text(font, font.substrByWidth(value, valueWidth).getString(FormattedText.DEFAULT_MAX_ITERATION), barX + barWidth + 4, y, Palette.of(COLOR_LABEL), false);
+			*///?} else
 			graphics.text(font, font.substrByWidth(value, valueWidth).getString(), barX + barWidth + 4, y, Palette.of(COLOR_LABEL), false);
 		}
 

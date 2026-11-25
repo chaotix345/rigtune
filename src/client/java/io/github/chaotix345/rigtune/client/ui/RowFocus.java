@@ -70,6 +70,9 @@ public final class RowFocus extends AbstractWidget {
 	}
 
 	@Override
+	//? if >=26.4-alpha {
+	/*protected void extractWidgetRenderState(GuiGraphicsExtractor graphics) {
+	*///?} else
 	protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		if (row == null && isFocused()) {
 			fill(graphics, getX(), getY(), getWidth(), getHeight());

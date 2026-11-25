@@ -20,8 +20,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // runs its action on Enter/Space only.
 class RowFocusTest {
 	// The InputConstants values are compile-time constants (each version's own numbers), so the class isn't loaded.
+	//? if >=26.4-alpha {
+	/*private static final KeyEvent ENTER = new KeyEvent(InputConstants.KEY_RETURN, 0, 0, false);
+	*///?} else
 	private static final KeyEvent ENTER = new KeyEvent(InputConstants.KEY_RETURN, 0, 0);
+	//? if >=26.4-alpha {
+	/*private static final KeyEvent SPACE = new KeyEvent(InputConstants.KEY_SPACE, 0, 0, false);
+	*///?} else
 	private static final KeyEvent SPACE = new KeyEvent(InputConstants.KEY_SPACE, 0, 0);
+	//? if >=26.4-alpha {
+	/*private static final KeyEvent TAB = new KeyEvent(InputConstants.KEY_TAB, 0, 0, false);
+	*///?} else
 	private static final KeyEvent TAB = new KeyEvent(InputConstants.KEY_TAB, 0, 0);
 
 	private static final class Row implements LayoutElement {

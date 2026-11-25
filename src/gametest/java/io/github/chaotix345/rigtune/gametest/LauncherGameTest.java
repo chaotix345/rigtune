@@ -208,6 +208,9 @@ public class LauncherGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> {
 			Screen screen = mc.gui.screen();
 			for (AbstractWidget w : Screens.getWidgets(screen)) {
+				//? if >=26.4-alpha {
+				/*if (w.isVisible()) {
+				*///?} else
 				if (w.visible) {
 					check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,
 							name + ": " + w.getMessage().getString() + " outside " + screen.width + "x" + screen.height);

@@ -3,6 +3,9 @@ package io.github.chaotix345.rigtune.client.probe;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.profile.BatteryPrompt;
 import org.jspecify.annotations.Nullable;
+//? if >=26.4-alpha {
+/*import oshi.spi.SystemInfoFactory;
+*///?} else
 import oshi.SystemInfo;
 import oshi.hardware.PowerSource;
 
@@ -124,6 +127,9 @@ public final class PowerWatcher {
 
 	private static List<Battery> oshiBatteries() {
 		List<Battery> sources = new ArrayList<>();
+		//? if >=26.4-alpha {
+		/*for (PowerSource source : SystemInfoFactory.create().getHardware().getPowerSources()) {
+		*///?} else
 		for (PowerSource source : new SystemInfo().getHardware().getPowerSources()) {
 			sources.add(oshi(source));
 		}

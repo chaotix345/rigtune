@@ -305,7 +305,9 @@ public class TryItScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, Palette.of(COLOR_TEXT));
 	}
@@ -362,6 +364,7 @@ public class TryItScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int x = getContentX() + 4;
 				int y = getContentY() + 1;

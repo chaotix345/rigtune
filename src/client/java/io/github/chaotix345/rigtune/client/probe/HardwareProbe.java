@@ -20,6 +20,9 @@ import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
+//? if >=26.4-alpha {
+/*import oshi.spi.SystemInfoFactory;
+*///?} else
 import oshi.SystemInfo;
 import oshi.hardware.CentralProcessor;
 import oshi.hardware.GraphicsCard;
@@ -185,6 +188,9 @@ public final class HardwareProbe {
 		List<Card> cards = new ArrayList<>();
 		HardwareAbstractionLayer hal = null;
 		try {
+			//? if >=26.4-alpha {
+			/*hal = SystemInfoFactory.create().getHardware();
+			*///?} else
 			hal = new SystemInfo().getHardware();
 		} catch (Throwable t) {
 			RigTune.LOGGER.warn("OSHI unavailable", t);

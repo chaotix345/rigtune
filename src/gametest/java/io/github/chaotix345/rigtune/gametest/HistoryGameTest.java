@@ -321,6 +321,9 @@ public class HistoryGameTest implements FabricClientGameTest {
 	private static void checkLayout(ClientGameTestContext context, String name) {
 		context.runOnClient(mc -> {
 			Screen screen = mc.gui.screen();
+			//? if >=26.4-alpha {
+			/*List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.isVisible()).toList();
+			*///?} else
 			List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
 			for (AbstractWidget w : widgets) {
 				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,

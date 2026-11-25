@@ -328,6 +328,9 @@ public class StutterGameTest implements FabricClientGameTest {
 			Screen screen = mc.gui.screen();
 			List<AbstractWidget> buttons = new ArrayList<>();
 			for (var child : screen.children()) {
+				//? if >=26.4-alpha {
+				/*if (child instanceof Button b && b.isVisible()) {
+				*///?} else
 				if (child instanceof Button b && b.visible) {
 					buttons.add(b);
 				}

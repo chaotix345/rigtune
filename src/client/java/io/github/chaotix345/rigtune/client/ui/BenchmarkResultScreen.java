@@ -408,6 +408,9 @@ public class BenchmarkResultScreen extends Screen {
 			Component full = Texts.component(line.text());
 			boolean first = true;
 			for (FormattedText row : font.getSplitter().splitLines(full, width - 16, Style.EMPTY)) {
+				//? if >=26.4-alpha {
+				/*out.add(new Line(Component.literal(row.getString(FormattedText.DEFAULT_MAX_ITERATION)), BenchmarkTrendLines.color(line.tone()), first ? full : null, !first));
+				*///?} else
 				out.add(new Line(Component.literal(row.getString()), BenchmarkTrendLines.color(line.tone()), first ? full : null, !first));
 				first = false;
 			}
@@ -453,7 +456,9 @@ public class BenchmarkResultScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		int y = 22;
@@ -622,6 +627,7 @@ public class BenchmarkResultScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getY() + 2;
 				if (best) {

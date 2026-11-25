@@ -102,6 +102,9 @@ public final class RigTuneClient implements ClientModInitializer {
 		V05Services.registerEvents(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
+		//? if >=26.4-alpha {
+		/*HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, graphics -> {
+		*///?} else
 		HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, (graphics, delta) -> {
 			Component progress = BenchmarkController.progress();
 			if (progress != null) {
@@ -325,6 +328,9 @@ public final class RigTuneClient implements ClientModInitializer {
 		widgets.add(button);
 		// Sodium's page list sits earlier in the child list and swallows clicks in its column, so claim ours first.
 		ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> {
+			//? if >=26.4-alpha {
+			/*if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && button.isVisible() && button.isMouseOver(event.x(), event.y()) && Screens.getWidgets(s).contains(button)) {
+			*///?} else
 			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && button.visible && button.isMouseOver(event.x(), event.y()) && Screens.getWidgets(s).contains(button)) {
 				button.playDownSound(Minecraft.getInstance().getSoundManager());
 				button.onPress(event);
@@ -367,6 +373,9 @@ public final class RigTuneClient implements ClientModInitializer {
 
 	private static boolean free(int x, int y, List<AbstractWidget> widgets) {
 		for (AbstractWidget w : widgets) {
+			//? if >=26.4-alpha {
+			/*if (w.isVisible() && x < w.getX() + w.getWidth() && x + BUTTON_WIDTH > w.getX() && y < w.getY() + w.getHeight() && y + 20 > w.getY()) {
+			*///?} else
 			if (w.visible && x < w.getX() + w.getWidth() && x + BUTTON_WIDTH > w.getX() && y < w.getY() + w.getHeight() && y + 20 > w.getY()) {
 				return false;
 			}

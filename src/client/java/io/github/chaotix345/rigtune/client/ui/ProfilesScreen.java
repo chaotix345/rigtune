@@ -250,7 +250,9 @@ public class ProfilesScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		Component line = status != null ? status : Component.translatable("rigtune.profile.subtitle");
@@ -315,6 +317,7 @@ public class ProfilesScreen extends Screen {
 		}
 
 		@Override
+		//$ extract_entry
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			boolean chosen = view.id().equals(selected);
 			if (chosen || hovered) {
@@ -394,7 +397,9 @@ public class ProfilesScreen extends Screen {
 		}
 
 		@Override
+		//$ extract_screen
 		public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+			//$ extract_call super
 			super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 			graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, height / 2 - 40, 0xFFFFFFFF);
 		}

@@ -24,8 +24,13 @@ public abstract class RowList<E extends ContainerObjectSelectionList.Entry<E>> e
 	}
 
 	@Override
+	//? if >=26.4-alpha {
+	/*protected void extractItem(GuiGraphicsExtractor graphics, E entry) {
+		super.extractItem(graphics, entry);
+	*///?} else {
 	protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, E entry) {
 		super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
+	//?}
 		RowFocus.outline(graphics, entry);
 	}
 

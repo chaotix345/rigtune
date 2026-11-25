@@ -167,7 +167,9 @@ public class UndoScreen extends Screen {
 	}
 
 	@Override
+	//$ extract_screen
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		//$ extract_call super
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		graphics.centeredText(font, clip(subtitle()), width / 2, 20, Palette.of(COLOR_LABEL));
@@ -273,6 +275,7 @@ public class UndoScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentBottom() - 11;
 				graphics.text(font, label, getContentX(), y, Palette.of(color), true);
@@ -313,6 +316,7 @@ public class UndoScreen extends Screen {
 			}
 
 			@Override
+			//$ extract_entry
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int x = getContentX() + 6;
 				int y = getContentY() + 1;
