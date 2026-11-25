@@ -34,7 +34,8 @@ Background and the evidence behind the policy: docs/research/v0.3/mc-versions.md
   `//? if >=<base>-alpha` (for example `>=26.4-alpha`), not `>=<id>`: Stonecutter compares
   pre-release ids as text, so `26.4-pre-1` and `26.4-rc-1` sort below `26.4-snapshot-1` and
   `>=26.4-snapshot-1` misses them (`-alpha` sorts below all three). Rewrite it as `>=<base>` once
-  the release node replaces the pre-release one.
+  the release node replaces the pre-release one, including the `stonecutter.eval(mcVersion, '>=26.4-alpha')`
+  that picks the swaps at the top of `build.gradle`.
 - Never an open-ended `>=`: every drop so far has changed bytecode RigTune depends on.
 - A hotfix that changes an API RigTune uses gets its own node (`26.3.1` with `~26.3.1`), and the old
   node is narrowed to `>=26.3 <26.3.1-` so the two jars never accept the same version.
@@ -45,7 +46,10 @@ Background and the evidence behind the policy: docs/research/v0.3/mc-versions.md
    first if it asks (Loom 1.18 needs Gradle 9.7 or newer).
 2. `python tools/add_mc_version.py <mc>`, then `./gradlew :<mc>:build` (with `JAVA_HOME` set to
    JDK 25).
-3. Fix compile errors with `//? if >=<mc> {` blocks. Run `python tools/mc_apidiff.py <prev> <mc>`
+3. Fix compile errors with `//? if >=<mc> {` blocks. A signature that changes in many files at
+   once can be a Stonecutter swap instead (26.4's GUI extract pass: `extract_screen`, `extract_entry`
+   and `extract_call` at the top of `build.gradle`). A `//$ <name>` comment replaces whatever line
+   follows it, so nothing may go between the marker and its target. Run `python tools/mc_apidiff.py <prev> <mc>`
    and review every changed class it lists, even when the build is green: reflection targets, the
    mixin target, `Options` keys and runtime defaults (a default can change without any API
    change: 26.4 makes Vulkan the default renderer).
@@ -128,7 +132,10 @@ python tools/mc_apidiff.py <prev> <mc> [--fabric-api V --modmenu V] [--out DIR] 
 `<prev>` is a node whose classes are compiled (`versions/<prev>/build/classes/java/`); `<mc>` is the
 version to check. The Fabric API and Mod Menu versions come from each node's `gradle.properties`;
 for a version that isn't a node, pass `--fabric-api` and `--modmenu` (the ones
-`add_mc_version.py --dry-run` picks). `--sets` changes the source sets it reads (default
+`add_mc_version.py --dry-run` picks). Both sides use the Fabric Loader named by `loader_version` in
+`gradle.properties`, so it doesn't compare Loader versions. The build compiles against 0.20.1 while
+`fabric.mod.json` accepts `>=0.19.5`; `./gradlew build -Ploader_version=0.19.5` checks that nothing
+needs 0.20 (CONTRIBUTING.md). `--sets` changes the source sets it reads (default
 `main,client,gametest,e2e,e2eUndo`; a set that isn't compiled is listed as not checked).
 
 What it checks:
@@ -239,7 +246,8 @@ issue by both. To fix it:
 2. Compile the previous node's classes and run `python tools/mc_apidiff.py <release> <snapshot>`
    (see above): it lists every member RigTune uses that is missing or changed.
 3. Handle each break with a `//? if >=<base>-alpha {` block (for `26.4-snapshot-1`,
-   `>=26.4-alpha`; see "Version ranges" for why not `>=<snapshot>`) until `:<snapshot>:build`
+   `>=26.4-alpha`; see "Version ranges" for why not `>=<snapshot>`) or a swap (see "Adding a
+   version" step 3) until `:<snapshot>:build`
    passes. Remove the throwaway node, check that `./gradlew build` still passes, and commit only the
    source change. When the release ships, rewrite the blocks as `>=<base>`.
 
@@ -260,5 +268,6 @@ When Mojang ships a hotfix (26.3.1) that RigTune's `~26.3` range already accepts
 ## Dropping a version
 
 Remove it from `versions` in `settings.gradle`, delete `versions/<mc>/`, and delete the `//? if`
-branches only it used (Stonecutter doesn't prune them). If it was the committed version
+branches only it used (Stonecutter doesn't prune them). A swap in `build.gradle` whose old text
+no remaining node uses becomes plain code (the extract swaps once 26.3 is dropped). If it was the committed version
 (`vcsVersion`), move `vcsVersion`, `stonecutter.active` and the version build.yml checks together.
