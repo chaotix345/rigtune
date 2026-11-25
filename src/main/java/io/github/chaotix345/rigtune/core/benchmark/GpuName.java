@@ -11,7 +11,12 @@ import java.util.regex.Pattern;
 // a parenthesised group holding a version number (digits, a dot, digits) is dropped, so a driver update isn't "another
 // GPU", while a chip or a trademark in parentheses ("(RADV GFX1201)", "(TM)") stays. Used when recording and again when
 // comparing, so records written before this (the raw string) still compare with new ones.
+// Review-13 R13-2: radeonsi's group also holds the chip, and every AMD APU is "AMD Radeon Graphics", so that group keeps
+// "(radeonsi, <chip>)" and drops the compiler (LLVM x.y.z or ACO), DRM and kernel (Mesa's si_get.c, si_init_renderer_string).
+// 0.5.x recorded the name without the chip; against such a key, the name alone is compared.
 public final class GpuName {
+	private static final Pattern RADEONSI_GROUP = Pattern.compile("\\(radeonsi, ([^,()]+),[^()]*\\)");
+	private static final Pattern RADEONSI_CHIP = Pattern.compile("\\(radeonsi, [^()]*\\)");
 	private static final Pattern VERSION_GROUP = Pattern.compile("\\([^()]*\\d+\\.\\d+[^()]*\\)");
 	private static final Pattern SPACES = Pattern.compile("\\s+");
 
@@ -23,7 +28,8 @@ public final class GpuName {
 		if (renderer == null) {
 			return null;
 		}
-		String out = SPACES.matcher(VERSION_GROUP.matcher(renderer).replaceAll(" ")).replaceAll(" ").strip();
+		String chip = RADEONSI_GROUP.matcher(renderer).replaceAll("(radeonsi, $1)");
+		String out = SPACES.matcher(VERSION_GROUP.matcher(chip).replaceAll(" ")).replaceAll(" ").strip();
 		return out.isEmpty() ? null : out;
 	}
 
@@ -31,6 +37,19 @@ public final class GpuName {
 	public static boolean same(String a, String b) {
 		String ca = clean(a);
 		String cb = clean(b);
-		return ca != null && cb != null && ca.toLowerCase(Locale.ROOT).equals(cb.toLowerCase(Locale.ROOT));
+		if (ca == null || cb == null) {
+			return false;
+		}
+		ca = ca.toLowerCase(Locale.ROOT);
+		cb = cb.toLowerCase(Locale.ROOT);
+		if (ca.equals(cb)) {
+			return true;
+		}
+		boolean chipA = RADEONSI_CHIP.matcher(ca).find();
+		return chipA != RADEONSI_CHIP.matcher(cb).find() && withoutChip(ca).equals(withoutChip(cb));
+	}
+
+	private static String withoutChip(String key) {
+		return SPACES.matcher(RADEONSI_CHIP.matcher(key).replaceAll(" ")).replaceAll(" ").strip();
 	}
 }

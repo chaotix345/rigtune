@@ -18,6 +18,12 @@ class GpuNameTest {
 	private static final String LLVMPIPE_20 = "llvmpipe (LLVM 20.1.2, 256 bits)";
 	private static final String ARC = "Intel(R) Arc(TM) B580 Graphics";
 	private static final String RTX3060 = "NVIDIA GeForce RTX 3060";
+	// Review-13 R13-2: Mesa's radeonsi writes "<name> (radeonsi, <chip>, <LLVM x.y.z or ACO>, DRM x.y, <kernel>)"
+	// (src/gallium/drivers/radeonsi/si_get.c, si_init_renderer_string), and every AMD APU's name is "AMD Radeon Graphics".
+	private static final String RENOIR = "AMD Radeon Graphics (radeonsi, renoir, LLVM 15.0.7, DRM 3.54, 6.5.0-14-generic)";
+	private static final String RENOIR_LATER = "AMD Radeon Graphics (radeonsi, renoir, LLVM 19.1.7, DRM 3.61, 6.14.0-37-generic)";
+	private static final String REMBRANDT = "AMD Radeon Graphics (radeonsi, rembrandt, LLVM 15.0.7, DRM 3.54, 6.5.0-14-generic)";
+	private static final String RX9070_ACO = "AMD Radeon RX 9070 XT (radeonsi, gfx1201, ACO, DRM 3.64, 6.17.0-arch1-1)";
 
 	@Test
 	void theSameCardAcrossMesaVersionsIsTheSameGpu() {
@@ -36,12 +42,35 @@ class GpuNameTest {
 	// Only groups with a build version go: a chip or a trademark in parentheses stays part of the name.
 	@Test
 	void cleanKeepsTheModelAndDropsVersionGroups() {
-		assertEquals("AMD Radeon RX 9070 XT", GpuName.clean(RX9070_LLVM20));
+		assertEquals("AMD Radeon RX 9070 XT (radeonsi, gfx1201)", GpuName.clean(RX9070_LLVM20));
 		assertEquals("llvmpipe", GpuName.clean(LLVMPIPE_15));
 		assertEquals(ARC, GpuName.clean(ARC));
 		assertEquals("AMD Radeon Graphics (RADV GFX1201)", GpuName.clean("AMD Radeon Graphics (RADV GFX1201)"));
 		assertEquals("D3D12 (Qualcomm(R) Adreno(TM) X1-85 GPU)", GpuName.clean("D3D12 (Qualcomm(R) Adreno(TM) X1-85 GPU)"));
 		assertNull(GpuName.clean("   "));
 		assertNull(GpuName.clean(null));
+	}
+
+	@Test
+	void twoApusWithTheSameNameAreAnotherGpu() {
+		assertFalse(GpuName.same(RENOIR, REMBRANDT));
+		assertFalse(GpuName.same(GpuName.clean(RENOIR), GpuName.clean(REMBRANDT)), "as recorded");
+		assertTrue(GpuName.same(RENOIR, RENOIR_LATER), "LLVM, DRM and kernel updates aside");
+	}
+
+	// radeonsi builds with ACO where LLVM isn't used: a Mesa update that switches compiler isn't another GPU.
+	@Test
+	void theCompilerIsNotPartOfTheGpu() {
+		assertTrue(GpuName.same(RX9070_LLVM21, RX9070_ACO));
+		assertEquals("AMD Radeon RX 9070 XT (radeonsi, gfx1201)", GpuName.clean(RX9070_ACO));
+	}
+
+	// 0.5.x recorded the name without the chip ("AMD Radeon RX 9070 XT"): those runs and fixes still compare by name.
+	@Test
+	void aKeyRecordedWithoutTheChipComparesByName() {
+		assertTrue(GpuName.same("AMD Radeon RX 9070 XT", RX9070_LLVM21));
+		assertTrue(GpuName.same("AMD Radeon RX 9070 XT", GpuName.clean(RX9070_LLVM21)));
+		assertTrue(GpuName.same(GpuName.clean(REMBRANDT), "AMD Radeon Graphics"));
+		assertFalse(GpuName.same("AMD Radeon RX 9060 XT", RX9070_LLVM21));
 	}
 }
