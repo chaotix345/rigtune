@@ -64,6 +64,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -531,7 +533,10 @@ public class FootprintGameTest implements FabricClientGameTest {
 			checkNoPowerWatcher(hardware, threadsOn);
 
 			context.runOnClient(mc -> mc.gui.setScreen(null));
-			TickTiming tick = context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick)));
+			List<TickTiming> ticks = remeasuredOverLimit(context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick))), tickRatioBudget(),
+					() -> context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick))), RigTune.LOGGER::info);
+			TickTiming tick = ticks.getFirst();
+			TickTiming gatedTick = ticks.getLast();
 			check(StutterMonitor.session() != null, "still capturing after the tick timing");
 			// X4.4 (SPEC 1h): the v0.5 listeners with their own END_CLIENT_TICK registration, each timed alone the same way, on the
 			// path it takes every tick here: RW-11/RW-17's settings check with a session running; C09's Try It tick, C16's toast
@@ -602,9 +607,9 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("monitorOffLeftoverInstances", leftover.values().stream().mapToLong(Long::longValue).sum());
 			measured.put("samplerCpuMsPer60s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
 			measured.put("tickHookNsPerCallOn", tick.nsPerCall());
-			measured.put("tickHookAllocBytesOn", tick.allocBytes());
-			measured.put(TICK_RATIO_KEY, tick.vsReference());
-			measured.put(TICK_TWIN_KEY, tick.twinVsReference());
+			measured.put("tickHookAllocBytesOn", ticks.stream().mapToLong(TickTiming::allocBytes).sum());
+			measured.put(TICK_RATIO_KEY, gatedTick.vsReference());
+			measured.put(TICK_TWIN_KEY, gatedTick.twinVsReference());
 			measured.put("tickHookNsPerCallWorld", tickOff.nsPerCall());
 			measured.put("tickHookAllocBytesWorld", tickOff.allocBytes());
 			measured.put("settingsCheckNsPerCall", settingsCheck.nsPerCall());
@@ -616,6 +621,9 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("launcherLeftoverTickNsPerCall", leftoverTick.nsPerCall());
 			measured.put("launcherLeftoverTickAllocBytes", leftoverTick.allocBytes());
 			out.put("tickHookTimingOn", tick.detail());
+			if (ticks.size() > 1) {
+				out.put("tickHookTimingOnRemeasured", gatedTick.detail());
+			}
 			out.put("tickHookTimingWorld", tickOff.detail());
 			out.put("settingsCheckTiming", settingsCheck.detail());
 			out.put("tryItTickTiming", tryItTick.detail());
@@ -689,7 +697,38 @@ public class FootprintGameTest implements FabricClientGameTest {
 	}
 
 	// ratios: medians over the triples of work / reference and of work-twice / reference.
-	private record TickTiming(double nsPerCall, long allocBytes, double vsReference, double twinVsReference, Map<String, Object> detail) {
+	record TickTiming(double nsPerCall, long allocBytes, double vsReference, double twinVsReference, Map<String, Object> detail) {
+	}
+
+	// As FrameHookBudgetTest.ratioGate (v0.5 RC insurance, coordinator, 2026-09-28): a tickHookOnVsReference over its limit is
+	// measured once more, and that second measure is the one gated and self-checked; a real regression is over both times.
+	// The limit and the self-check are unchanged (docs/research/tickhook-ratio.md: one JVM in three under load measured 2.001,
+	// then 1.70-1.72). Every measure is logged. Returns the measures taken, the gated one last.
+	static List<TickTiming> remeasuredOverLimit(TickTiming first, FootprintBudgets.@Nullable Budget budget, Supplier<TickTiming> again,
+			Consumer<String> log) {
+		logTickRatio(first, log);
+		if (budget == null || first.vsReference() <= budget.limit()) {
+			return List.of(first);
+		}
+		log.accept(String.format(Locale.ROOT, "FootprintGameTest: monitor on: %s %.3f is over its limit %s: measuring once more", TICK_RATIO_KEY,
+				first.vsReference(), budget.limit()));
+		TickTiming second = again.get();
+		logTickRatio(second, log);
+		return List.of(first, second);
+	}
+
+	private static void logTickRatio(TickTiming timing, Consumer<String> log) {
+		log.accept(String.format(Locale.ROOT, "FootprintGameTest: monitor on: %s %.3f (twice the work %.3f); median %.2f ns/call, reference %s ns, clock %s ns",
+				TICK_RATIO_KEY, timing.vsReference(), timing.twinVsReference(), timing.nsPerCall(), timing.detail().get("medianReferenceNs"),
+				timing.detail().get("medianClockNs")));
+	}
+
+	private static FootprintBudgets.@Nullable Budget tickRatioBudget() {
+		try {
+			return FootprintBudgets.load().budgets().get(TICK_RATIO_KEY);
+		} catch (IOException e) {
+			throw new AssertionError("Could not read the footprint budgets", e);
+		}
 	}
 
 	// RigTune's two END_CLIENT_TICK listeners on the play path: RigTuneClient.onTick and the monitor's own
@@ -755,6 +794,18 @@ public class FootprintGameTest implements FabricClientGameTest {
 				referenceNs[block] = (t4 - t3) / (double) TICK_BLOCK_CALLS;
 				cpuRatio[block] = c4 > c3 ? (c1 - c0) / (double) (c4 - c3) : Double.NaN;
 			}
+			long jitMsDuringBlocks = jit.getTotalCompilationTime() - jitBefore;
+			// A diagnostic, not gated, after the gated blocks: System.nanoTime()'s cost per call on this runner. The monitor-on tick
+			// work reads the clock once per call (StutterHooks.movement); the reference doesn't (docs/research/tickhook-ratio.md).
+			for (int round = 0; round < TICK_WARM_UP_ROUNDS; round++) {
+				referenceSink += clock(TICK_WARM_UP_CALLS);
+			}
+			double[] clockNs = new double[TICK_BLOCKS];
+			for (int block = 0; block < TICK_BLOCKS; block++) {
+				long t0 = System.nanoTime();
+				referenceSink += clock(TICK_BLOCK_CALLS);
+				clockNs[block] = (System.nanoTime() - t0) / (double) TICK_BLOCK_CALLS;
+			}
 			double[] ratio = new double[TICK_BLOCKS];
 			double[] twinRatio = new double[TICK_BLOCKS];
 			for (int block = 0; block < TICK_BLOCKS; block++) {
@@ -766,6 +817,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			detail.put("medianNs", round2(median(onceNs)));
 			detail.put("medianTwiceNs", round2(median(twiceNs)));
 			detail.put("medianReferenceNs", round2(median(referenceNs)));
+			detail.put("medianClockNs", round2(median(clockNs)));
 			detail.put("vsReference", round3(median(ratio)));
 			detail.put("twinVsReference", round3(median(twinRatio)));
 			// Thread CPU time instead of wall (a diagnostic: Windows counts thread CPU in 15.6 ms steps, so it is NaN or
@@ -773,7 +825,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			double[] cpuRatios = Arrays.stream(cpuRatio).filter(r -> !Double.isNaN(r)).toArray();
 			detail.put("vsReferenceCpu", cpuRatios.length == 0 ? null : round3(median(cpuRatios)));
 			detail.put("jitQuietWaitMs", quietWaitMs);
-			detail.put("jitMsDuringBlocks", jit.getTotalCompilationTime() - jitBefore);
+			detail.put("jitMsDuringBlocks", jitMsDuringBlocks);
 			detail.put("ns", Arrays.stream(onceNs).map(FootprintGameTest::round2).toArray());
 			detail.put("twiceNs", Arrays.stream(twiceNs).map(FootprintGameTest::round2).toArray());
 			detail.put("referenceNs", Arrays.stream(referenceNs).map(FootprintGameTest::round2).toArray());
@@ -817,6 +869,14 @@ public class FootprintGameTest implements FabricClientGameTest {
 			x += i;
 		}
 		referenceState = x;
+		return sum;
+	}
+
+	private static long clock(int calls) {
+		long sum = 0;
+		for (int i = 0; i < calls; i++) {
+			sum += System.nanoTime();
+		}
 		return sum;
 	}
 

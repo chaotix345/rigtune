@@ -117,6 +117,10 @@ sourceSets {
 	test {
 		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
 		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output
+		// The game tests' classes, for unit tests of their helpers (FootprintTickRemeasureTest); not their resources, whose
+		// fabric.mod.json would stand in for RigTune's.
+		compileClasspath += sourceSets.gametest.output.classesDirs
+		runtimeClasspath += sourceSets.gametest.output.classesDirs
 	}
 }
 
