@@ -30,7 +30,12 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Release plan (6 Nov)
 1. **0.5.2**: released 7 Nov (see "Where it stands"). The next patch (0.5.3) only if a bug needs code; rules fixes ship on main without a release.
 2. **0.6.0, MC 26.4** (pre-approved 16 Nov, see "Approved by Charlie"). **Started 25 Nov**, the day after 26.4-pre-1 (24 Nov; Fabric API 0.167.1+26.4 has a build for it, Sodium and Iris don't yet). The port follows docs/v0.6/checklist.md (PR #101) in two PRs. (Fable: port decisions, 25 Nov.)
-   - **PR A (now, worker below):** `src/` only, `>=26.4-alpha` blocks built against a throwaway 26.4-pre-1 node that isn't committed (the tools/MC_VERSIONS.md "Snapshot canary" flow, so it may merge before the release), plus `loader_version` 0.20.1 (keep `>=0.19.5`). It closes #49 once the canary goes green.
+   - **PR A: merged 25 Nov (#106).** `src/` gained `>=26.4-alpha` blocks and Stonecutter swaps (build.gradle) and builds on 26.4-pre-1 (2,930 unit tests pass). It was built against a throwaway node that isn't committed. 26.2 and 26.3 disassemble identically. `loader_version` is now 0.20.1 (still `>=0.19.5`). Reviewed by Opus: merge. #49 closes when the canary goes green (next run Wed 2 Dec). For PR B or the release, from that review:
+     - Add a runtime check on 26.4 that OSHI still reports the card, CPU, RAM and battery. FFM may fall back to the native-free provider, which would quietly report less. The Prism smoke test covers it.
+     - A note in CONTRIBUTING.md that a `//$` swap replaces whatever line follows it.
+     - Run mc_apidiff against Loader 0.19.5 before releasing, since the code now compiles against 0.20.1.
+     - Fabric API 0.167.1+26.4 itself needs fabricloader >=0.20.0, which Fabric enforces for 26.4 players.
+     - The graphics backend key for pinning is `preferredGraphicsBackend` (default/opengl/vulkan).
    - **PR B (after 26.4's release, with Sodium and Iris builds):** swap the 26.2 node for 26.4, rewrite the blocks as `>=26.4`, regenerate the rules, and the four decisions:
      1. The rules keep 26.2 through a rules-only list (`RULES_ONLY_VERSIONS = ("26.2",)` in update_rules.py) until the 26.5 port, so offline 0.5.2 players on 26.2 keep real availability. It must land in or before the node removal.
      2. E2E: brand-theseus and both stale seeds move to 26.3; upgrade-from-0.1.0 and seeded-v010-dh are dropped; e2e_matrix.py fails loudly on a retired node.
@@ -107,7 +112,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:dad4c7e9d782ccf4a4fee5d64efac4ba1e2671013d090a995ea28c34848cdf6b> | `feat/port-264-a` | src/ (version blocks only), gradle.properties `loader_version`, docs/v0.6/checklist.md | Started 25 Nov: 0.6.0 port PR A against 26.4-pre-1 |
+None.
 
 Workers are on (Charlie, 9 Nov); HQ starts them as needed. From 16 Nov the PC restarts every night at 03:30: no worker or gate may be mid-run then. Evening workers must commit and push before 03:00 (state that in their briefs), and HQ starts no gate or background command that would still be running at 03:30.
 
@@ -129,6 +134,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-25 PR #106 merged (0.6.0 port PR A): RigTune's source builds on MC 26.4-pre-1 behind `>=26.4-alpha` blocks, 26.2 and 26.3 are unchanged (identical class files), and Fabric Loader is 0.20.1. Reviewed by Opus (merge, no blockers); its warning and nits are listed under the Release plan for PR B. The worker thread is settled. Two breaks the survey missed were fixed (AbstractWidget.visible in game tests, KeyEvent `repeat`).
 - 2026-11-25 MC 26.4-pre-1 came out 24 Nov, and the 0.6.0 port has started: PR A (compile on 26.4-pre-1, loader 0.20.1) has a worker. The four port decisions are made (Release plan; Fable: port decisions). The 23 Nov rules bot found no content change (r24 stays). Quiet otherwise.
 - 2026-11-23 PR #101 merged: docs/v0.6/checklist.md and a draft `[Unreleased]` CHANGELOG section for 0.6.0. PR #102 merged (reaches users in 0.6.0): the launch toast's net-change count uses what the helper actually overwrote (a new nullable `before` per op in last-apply.json, still readable by 0.5.2), and PendingNet compares values the way each patcher does. Reviewed by Fable 5.2 (merge) and Codex gpt-6.1-sol (merge after fixes); their three shared findings were fixed before the merge. Both worker threads settled. docs/hq.md "Releasing" now names 0.6.0 as pre-approved.
 - 2026-11-23 Weekly review. A quiet week for users: no issues, Modrinth still under review, 0.5.x downloads flat. CI had 47 runs and no failures (5 superseded runs cancelled on main). Artifacts fell to 516 after PR #86. Charlie flew out 21 Nov. The daily runs every day again after the low-usage weekend. Two Backlog workers started (0.6.0 checklist, PR #63 nits), and the Backlog was refilled. Housekeeping: 2 merged worker branches deleted. No Fable pass this week: the priorities follow directly from the trip and the 26.4 wait.
