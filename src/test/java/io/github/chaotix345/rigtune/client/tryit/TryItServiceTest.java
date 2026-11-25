@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.tryit;
 
 import io.github.chaotix345.rigtune.client.Busy;
 import io.github.chaotix345.rigtune.client.RealController;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene;
@@ -10,6 +11,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -241,6 +243,28 @@ class TryItServiceTest {
 		assertNotNull(service.refusal(sodium), "one op would run at the restart");
 		game.pendingOps = 0;
 		assertNull(service.refusal(sodium));
+	}
+
+	// Review R12X-4: the start hook's derive often reads pending.json before launcher detection answers (PENDING). The
+	// helper holds mod-file groups under PENDING and LAUNCHER alike, so the answer LAUNCHER brings is the same one: no
+	// "waiting" line for a moment, and no read again.
+	@Test
+	void launcherDetectionAnsweringKeepsThePendingAnswer() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.policy = ModFilesPolicy.PENDING;
+		game.pendingOps = 2;
+		game.heldOps = 2;
+		service.derive();
+		game.drain();
+		int reads = game.pendingReads;
+		game.policy = ModFilesPolicy.LAUNCHER;
+		assertNull(service.refusal(sodium()), "only held mod changes, held under both policies");
+		assertEquals(reads, game.pendingReads);
+		game.policy = ModFilesPolicy.RIGTUNE;
+		assertNotNull(service.refusal(sodium()), "RigTune applies them at exit");
+		game.drain();
+		assertNotNull(service.refusal(sodium()));
 	}
 
 	// Review BENCH-1: history.json is read once per derive: a read that fails right after the apply can't make the try's
@@ -556,6 +580,7 @@ class TryItServiceTest {
 		// pending.json: its ops, and how many of them the helper holds (0 ops: no file).
 		int pendingOps;
 		int heldOps;
+		ModFilesPolicy policy = ModFilesPolicy.LAUNCHER;
 		int pendingReads;
 		final Map<String, String> settings = new LinkedHashMap<>(Map.of("vanilla.renderDistance", "12"));
 		TryIt.Spot spot = HERE;
@@ -638,13 +663,13 @@ class TryItServiceTest {
 
 		@Override
 		public @Nullable Object pendingStamp() {
-			return pendingOps == 0 ? null : List.of(pendingOps, heldOps);
+			return pendingOps == 0 ? null : TryItService.pendingStamp(List.of(pendingOps, heldOps), policy);
 		}
 
 		@Override
 		public boolean pendingRunsAtExit() {
 			pendingReads++;
-			return pendingOps > heldOps;
+			return pendingOps > (HelperLauncher.holds(policy) ? heldOps : 0);
 		}
 
 		@Override

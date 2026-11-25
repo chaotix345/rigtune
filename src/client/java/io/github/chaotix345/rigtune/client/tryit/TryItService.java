@@ -32,6 +32,7 @@ import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalCache;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -127,8 +128,8 @@ public final class TryItService {
 		// pending: other staged changes the next exit would apply (Triable's PENDING).
 		Triable.Context context(boolean busy, boolean pending, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable);
 
-		// pending.json's modification time and size with the mod-files policy (a stat; the render thread may ask), null
-		// without the file.
+		// pending.json's modification time and size with whether the helper holds mod-file groups (a stat; the render
+		// thread may ask), null without the file.
 		@Nullable Object pendingStamp();
 
 		// Whether the next exit's helper would apply any of pending.json's ops: not the mod-file groups it holds in a
@@ -238,6 +239,13 @@ public final class TryItService {
 			io(this::readPending);
 		}
 		return true;
+	}
+
+	// Game.pendingStamp's key: the files' stamps and whether the helper holds mod-file groups, the one thing the answer
+	// takes from the policy. Review R12X-4: not the policy itself, so launcher detection answering LAUNCHER after the
+	// start hook's read under PENDING (both hold) serves no provisional "waiting" answer.
+	static Object pendingStamp(Object files, ModFilesPolicy policy) {
+		return List.of(files, HelperLauncher.holds(policy));
 	}
 
 	// The chain: pending.json read again when its stamp changed.
@@ -990,7 +998,7 @@ public final class TryItService {
 			Path pending = PendingActions.defaultPath(configDir());
 			// #46: the answer also depends on the config files' values (PendingNet), so their stamps count too.
 			List<Object> files = PendingNetCheck.stamp(pending, ConfigTargets.all(configDir()));
-			return PendingNetCheck.MISSING.equals(files.getFirst()) ? null : List.of(files, controller.modFiles());
+			return PendingNetCheck.MISSING.equals(files.getFirst()) ? null : TryItService.pendingStamp(files, controller.modFiles());
 		}
 
 		@Override
