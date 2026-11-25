@@ -48,6 +48,9 @@ class FrameHookBudgetTest {
 	private static final long JIT_QUIET_MS = 100;
 	private static final long JIT_QUIET_CAP_MS = 10_000;
 	private static final long[] REFERENCE = new long[256];
+	private static final long[] REFERENCE_ENDS = new long[1 << 17];
+	private static final int[] REFERENCE_PHASES = new int[1 << 17];
+	private static int referenceRing;
 	private static long referenceState = 0x9E3779B97F4A7C15L;
 	private static long referenceSink;
 
@@ -229,8 +232,19 @@ class FrameHookBudgetTest {
 		return sorted.length % 2 == 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 	}
 
-	// A fixed pure-Java workload (loads, stores, a branch) per call, the runner's yardstick (as FootprintGameTest's).
+	// A fixed pure-Java workload per call, the runner's yardstick: a long and an int store into rings as big as the session
+	// capture's (1 << 17 frames, 1.5 MB, past a core's L2), as the hook writes FrameRing's ends and phases, then
+	// FootprintGameTest's loads, stores and branch. When other processes crowd the shared L3, the ring stores miss in the
+	// hook and here alike. They run as a loop of their own: inside the loop below, the core hid their misses behind the
+	// xorshift work and the reference didn't slow with the hook.
 	private static void reference(int calls) {
+		int ring = referenceRing;
+		for (int i = 0; i < calls; i++) {
+			ring = (ring + 1) & (REFERENCE_ENDS.length - 1);
+			REFERENCE_ENDS[ring] = referenceState + i;
+			REFERENCE_PHASES[ring] = i;
+		}
+		referenceRing = ring;
 		long x = referenceState;
 		long sum = 0;
 		for (int i = 0; i < calls; i++) {
