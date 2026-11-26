@@ -119,7 +119,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:3ce9ea8a216ba4e28c8fbea71633d77a3c50bc1341f3c991d5dfc619ddc4166c> | `docs/drift-check` | CONTRIBUTING.md, docs/DESIGN.md, tools/MC_VERSIONS.md, build.gradle's top comment | Started 26 Nov (Backlog burn before the 30 Nov reset): docs drift, plus the swap and loader-floor notes from PR #106's review. RigTune gets 1 worker at a time this week and yields gate slots and RAM to Smoov, Business and Blindstamp; no workers after 23:00. |
+None. Until the 30 Nov reset, RigTune gets one worker at a time, yields gate slots and RAM to Smoov, Business and Blindstamp, and starts no worker after 23:00.
 
 Workers are on (Charlie, 9 Nov); HQ starts them as needed. From 16 Nov the PC restarts every night at 03:30: no worker or gate may be mid-run then. Evening workers must commit and push before 03:00 (state that in their briefs), and HQ starts no gate or background command that would still be running at 03:30.
 
@@ -127,19 +127,27 @@ Also from PR #60's review: the 26.3 client game tests weren't run locally for #6
 
 ## Backlog
 Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill "Backlog and leftover quota"; Claude resets Mon ~08:00 Sydney, so Sunday is the burn day). Nothing under `rules/` (live on merge), nothing that publishes or releases; code fixes reach users only in a later release.
-- review-12/13 lows (`docs/reviews/review-12.md`, `review-13.md`: R12FEAT-2..9, R12X-4/5, R12APPLY-4, R12REL-3/5/6, R12STUTTER-4/5/7, R13-2): triage which still apply on main and fix a few small ones per PR, one area at a time.
-- An OSHI runtime check for 26.4: that the card, CPU, RAM and battery still come from OSHI's FFM provider and not the native-free fallback (PR #106's review warning). It's a test or a logged probe line, not a release step.
-- The two old v0.x worktrees (`C:\Dev\Worktrees\rigtune-audit-verify`, `rigtune-realworld`, see "Housekeeping"): save their uncommitted files (a commit on their own branches, pushed, or a bundle in `C:\Users\Admin\Documents\rigtune-archive`), say which of them still matter against main, so HQ can remove both worktrees.
-- STUTTER-9/10/11 and PERF-7 from the v0.6 backlog (docs/PROGRESS.md): triage which still apply on main, and fix one small one per PR (no rules changes).
-- The FootprintGameTest returning-player delta (`returningAddedRenderThreadInitCpuMs`, budget 80 ms) failed twice by 0.4 ms before PR #88 (per #88's worker). Check on recent CI footprint artifacts that its headroom is now comfortable, and report the numbers. No budget changes.
+- An OSHI runtime check for 26.4: that the card, CPU, RAM and battery still come from OSHI's FFM provider and not the native-free fallback (PR #106's review warning). It needs a 26.4 client, so it goes with port PR B.
+- STUTTER-11's activity guard (PR #115's body): it needs a data-based threshold; gather the data first.
+- Weekly review: refill to about 5 (the 26 Nov burn emptied it).
 
 ## Housekeeping
 - 6 Nov: the six remote `scratch/*` proof branches deleted (local copies remain). 16 Nov: the five v0.5 branches (`fix/v05-awareness`, `fix/v05-r11-ws-b`, `research/v05-ci`, `research/v05-verify`, `local/v05-battery`) deleted locally and on GitHub after the audit (PR #81: everything worth keeping is on main). A bundle of all five is at `C:\Users\Admin\Documents\rigtune-archive\v05-research.bundle`, because `ci-robustness.md` and `verification-gaps.md` cite commits that were only on the two research branches (`git fetch <bundle> <branch>` restores one).
 - `git branch -D` asks for approval (a user hook): fine when Charlie is at the PC, but it stalls unattended runs, so leave local unmerged branches for a turn with him.
-- Old worktrees `C:\Dev\Worktrees\rigtune-audit-verify` and `rigtune-realworld`: their branches are merged, but both have uncommitted files (AuditVerify*/RealWorld* tests; an edited ApplyExecutor.java) and broken links to the repo's old folder ("C:/Dev/Minecraft Setting Optimisation Mod"). Kept; don't delete without saving those files first.
+- 26 Nov: the old worktrees `C:\Dev\Worktrees\rigtune-audit-verify` and `rigtune-realworld` were removed, and their branches deleted. All 8 uncommitted files were already on main in later forms (docs/research/old-worktrees.md, PR #116). Copies with SHA-256 manifests are in `C:\Users\Admin\Documents\rigtune-archive\old-worktrees-2026-11-26\`, with a second copy under `rigtune-archive\backup\`.
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-26 Backlog burn (one worker at a time, spare usage before the 30 Nov reset), PRs #112-#120 merged, all gated and CI-green:
+  - #112: docs drift in CONTRIBUTING, DESIGN and MC_VERSIONS, plus the swap and loader-floor notes.
+  - #113: review-12/13 lows triaged (16 of 18 already fixed). R13-2 fixed: radeonsi APUs that share a name now count as different GPUs.
+  - #114: R12X-4, Try It's pending answer no longer flashes after launcher detection.
+  - #115: STUTTER-9 (the AFK onset is excluded through a new `FramerateLimitTracker` accessor mixin) and PERF-7 (the DH config wrapper is cached). Opus-reviewed, with a test seam added.
+  - #116: the old worktrees archived and removed.
+  - #117, #118 and #119: research notes on footprint headroom, startup worker CPU and the tick-hook ratio. `monitorOnRetainedBytes` is at 98% but constant, and `workerCpuMs5s` peaked at 96% on one slow runner with nothing reasonable left to cut.
+  - #120: tickHookOnVsReference measures once more when over the limit (as FrameHookBudgetTest does), and the clock's cost is recorded.
+  - Code changes reach users in 0.6.0.
+  - Lesson: reusing a fixed temp-worktree name for two gate runs let the second one's cleanup delete files under the first, still-running build (PR #115's first gate). Every gate worktree now gets a unique name.
 - 2026-11-26 PR #110 merged: the FrameHookBudgetTest flake is fixed with the limits unchanged. It was L3 cache contention: other processes evict the hook's 1.5 MB frame ring. Now the reference also streams stores through rings that size. Under 8 memory-streaming helpers the test went from failing every time to passing 3 of 3 runs. The idle ratio is about 3% lower, so the doubled-work self-check margin is now about 13%. The worker thread is settled. Docs drift worker started (one RigTune worker at a time this week).
 - 2026-11-25 PR #106 merged (0.6.0 port PR A): RigTune's source builds on MC 26.4-pre-1 behind `>=26.4-alpha` blocks, 26.2 and 26.3 are unchanged (identical class files), and Fabric Loader is 0.20.1. Reviewed by Opus (merge, no blockers); its warning and nits are listed under the Release plan for PR B. The worker thread is settled. Two breaks the survey missed were fixed (AbstractWidget.visible in game tests, KeyEvent `repeat`).
 - 2026-11-25 MC 26.4-pre-1 came out 24 Nov, and the 0.6.0 port has started: PR A (compile on 26.4-pre-1, loader 0.20.1) has a worker. The four port decisions are made (Release plan; Fable: port decisions). The 23 Nov rules bot found no content change (r24 stays). Quiet otherwise.
