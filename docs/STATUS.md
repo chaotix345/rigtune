@@ -86,6 +86,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 | When | What | Notes |
 |---|---|---|
 | Before Sat 21 Nov (his plan, told to the coordinating thread 16 Nov) | AMD GPU driver update, if he still wants it. HQ's advice: not on Fri 20 or Sat 21, keep the old installer for a rollback; the 0x141 timeouts predate the current driver. EXPO stays on and the BIOS stays unchanged until 10 Dec (decided 16 Nov). | Not HQ's to do. Unknown whether it happened. |
+| 10 Dec (his Modrinth login; about 15 min) | Modrinth fix list: docs/research/modrinth-review.md "The 15-minute list" (PR #123). It covers three disclosures (external system interactions, AI-generated content, telemetry opt-out), each 0.5.x version's client/server fields, description, summary and gallery edits, and an optional single moderator note. His call: under rule 6.2, the AI disclosure may keep RigTune unlisted (link-only) even after approval; the report explains it. | Most likely why review is stuck or would be rejected: the three disclosures, added after our 25 Sep submission, are unset. Nothing was sent or changed on Modrinth. |
 | December | File the upstream Fabric API issue for the client game-test deadlock | Written, not filed: docs/v0.5/design/gametest-deadlock.md. Outward. Left until after the trip (11 Nov). |
 
 ## Approved by Charlie
@@ -122,7 +123,7 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:725866e8e9c34c2a585e11c5212fc9150aadac16f68f91f9afd3f40aa99dfa4a> | `research/modrinth-review` | docs/research/modrinth-review.md (new) | Started 26 Nov (the coordinating thread's pick): why the Modrinth review is stuck. A ranked fix list and a draft moderator message for Charlie on 10 Dec, with the Neon player read folded in. No logins or edits. |
+None.
 
 Until the 30 Nov reset, RigTune gets one worker at a time and yields gate slots and RAM to Smoov, Business and Blindstamp.
 
@@ -143,6 +144,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-26 PR #123 merged: docs/research/modrinth-review.md. It explains why the Modrinth review is stuck and gives a 15-minute fix list for Charlie on 10 Dec ("Waiting on Charlie"). A Gemini Neon player read of the listing copy is folded in, checked against the code. The worker thread is settled.
 - 2026-11-26 Night rule changed (Charlie): workers may work past 23:00 and push by 03:00, and a new 03:45 after-restart job resumes whatever the restart cut off. That makes three scheduled jobs; the daily job's check and docs/hq.md "Scheduled jobs" are updated. The Modrinth review research worker started (with a Gemini Neon player read of the listing).
 - 2026-11-26 Backlog burn (one worker at a time, spare usage before the 30 Nov reset), PRs #112-#120 merged, all gated and CI-green:
   - #112: docs drift in CONTRIBUTING, DESIGN and MC_VERSIONS, plus the swap and loader-floor notes.
