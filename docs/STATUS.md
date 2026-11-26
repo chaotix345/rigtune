@@ -4,7 +4,10 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 
 ## HQ
 - Thread: <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:f6239851193202426897d6fed4bb69c7dfbdb769c4541fdf999d03a71c9a484b> (pinned, "RigTune HQ", since 16 Nov). Thread id: `mcp:launch:f6239851193202426897d6fed4bb69c7dfbdb769c4541fdf999d03a71c9a484b` (workers `t3_thread_send` here). Project id: `951159fe-96cd-4205-939b-630793975b28`. Worktree: `C:\Users\Admin\.t3\worktrees\rigtune\chore-hq-20261116-1130-911a2529d81914e0` (HQ marker in its git dir, `C:\Dev\rigtune\.git\worktrees\chore-hq-20261116-1130-911a2529d81914e0\rigtune-hq`). Earlier HQs are retired and their markers deleted: <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:2cab5c2f8a450a0caa41bc0c03a1456ead2851957b07681ca804a5f2e49f4ca0> (8-16 Nov) and <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:1a6f4b05932c9083d4ba76e4ee9cf8df5f6b97d3b474dec8790b8c3b8db68746> (6-8 Nov).
-- Jobs: daily `scheduled-task:command:mcp:0b63e281-69ec-4efd-84d1-424ae89f3ddd:schedule-task:rigtune-hq-f6239851-daily` (11:00, next 17 Nov 11:00); weekly `scheduled-task:command:mcp:0b63e281-69ec-4efd-84d1-424ae89f3ddd:schedule-task:rigtune-hq-f6239851-weekly` (Mon 16:00, next 16 Nov 16:00).
+- Jobs (three):
+  - daily `scheduled-task:command:mcp:0b63e281-69ec-4efd-84d1-424ae89f3ddd:schedule-task:rigtune-hq-f6239851-daily` (11:00 every day)
+  - weekly `scheduled-task:command:mcp:0b63e281-69ec-4efd-84d1-424ae89f3ddd:schedule-task:rigtune-hq-f6239851-weekly` (Mon 16:00)
+  - after-restart resume `scheduled-task:command:mcp:ea81281b-289d-4127-8c15-bc45a8452ac7:schedule-task:rigtune-hq-f6239851-after-restart` (03:45 every day, since 26 Nov; first run 27 Nov 03:45)
 - Coordinating thread: `mcp:launch:8fd0f6a1b6654ccbe79ed5714aa5b47863c0773787c78281f1a8c7aff41c7a1a` (since 26 Nov; the earlier `79c4c389` and `e20bf07b` are retired). Copy anything for Charlie there, and tell it a new HQ's thread id on handover (docs/hq.md "Coordinating thread").
 - Secrets: none on this PC. `MODRINTH_TOKEN` is a GitHub Actions secret only (release.yml). HQ has no Modrinth access, so moderation status, messages, comments and reports aren't visible to it.
 - Low RAM on this PC: follow `C:\Users\Admin\Documents\ram-watch\README.md`. Check first with `powershell -ExecutionPolicy Bypass -File C:\Users\Admin\Documents\perfinfo.ps1`: kernel paged pool over 4 GB or nonpaged pool over 2 GB means a kernel leak, and Charlie's restart fixes it. Otherwise stop dev servers you don't need. Never kill the hidden session-0 Python processes. Ask Charlie before uninstalling anything or stopping services. Never disable a driver or service without first checking the device-class filter lists (on 10 Nov, disabling a Citrix USB filter killed all USB input at boot), and follow Charlie's rules for boot changes in the README (a restore point first, and an undo that works offline from Windows Recovery). The leaks so far: an Acronis driver (uninstalled 7 Nov), then Citrix Workspace leaking a token per process started (uninstalled 11 Nov, confirmed at about 0 per process afterwards). A second, activity-driven leak remains (cause unknown), so the PC restarts every night at 03:30 (since 16 Nov; first unattended restart passed). Separate from RAM: the RX 7800 XT has occasional GPU timeouts (LiveKernelEvent 0x141), and on 16 Nov 00:00 one ended in a self-reset; findings and the pre-trip recommendations are in the same README ("Not RAM").
@@ -119,9 +122,11 @@ HQ owns this file and rewrites it (not appends). Workers report to HQ instead of
 ## Active work
 | Thread | Branch | Owns | State |
 |---|---|---|---|
-None. Until the 30 Nov reset, RigTune gets one worker at a time, yields gate slots and RAM to Smoov, Business and Blindstamp, and starts no worker after 23:00.
+| <t3-thread://v2/bbbcce92-2183-4264-8848-ffb9dadcbe55/mcp:launch:725866e8e9c34c2a585e11c5212fc9150aadac16f68f91f9afd3f40aa99dfa4a> | `research/modrinth-review` | docs/research/modrinth-review.md (new) | Started 26 Nov (the coordinating thread's pick): why the Modrinth review is stuck. A ranked fix list and a draft moderator message for Charlie on 10 Dec, with the Neon player read folded in. No logins or edits. |
 
-Workers are on (Charlie, 9 Nov); HQ starts them as needed. From 16 Nov the PC restarts every night at 03:30: no worker or gate may be mid-run then. Evening workers must commit and push before 03:00 (state that in their briefs), and HQ starts no gate or background command that would still be running at 03:30.
+Until the 30 Nov reset, RigTune gets one worker at a time and yields gate slots and RAM to Smoov, Business and Blindstamp.
+
+Workers are on (Charlie, 9 Nov); HQ starts them as needed. The PC restarts every night at 03:30. Since 26 Nov (Charlie), workers may work past 23:00. They push by 03:00 and stop cleanly, and no gate or long command starts after about 02:45. The 03:45 after-restart job resumes them (docs/hq.md "Workers" night rule and "Scheduled jobs").
 
 Also from PR #60's review: the 26.3 client game tests weren't run locally for #60 (CI ran them).
 
@@ -138,6 +143,7 @@ Internal-only, low-risk tasks for quota that would otherwise go unused (hq skill
 - This PC ran short of memory on 6 Nov with four workers building: two Gradle runs died with out-of-memory errors and passed on retry. Charlie found the main cause on 7 Nov, a kernel memory leak in an Acronis driver, now uninstalled (see "HQ" for the RAM runbook). Since 8 Nov every local gate runs through the shared gate queue (2 at once across all projects, 3 GB free RAM to start), and up to 4 workers may run (docs/hq.md "The gate", "Workers").
 
 ## Recent changes
+- 2026-11-26 Night rule changed (Charlie): workers may work past 23:00 and push by 03:00, and a new 03:45 after-restart job resumes whatever the restart cut off. That makes three scheduled jobs; the daily job's check and docs/hq.md "Scheduled jobs" are updated. The Modrinth review research worker started (with a Gemini Neon player read of the listing).
 - 2026-11-26 Backlog burn (one worker at a time, spare usage before the 30 Nov reset), PRs #112-#120 merged, all gated and CI-green:
   - #112: docs drift in CONTRIBUTING, DESIGN and MC_VERSIONS, plus the swap and loader-floor notes.
   - #113: review-12/13 lows triaged (16 of 18 already fixed). R13-2 fixed: radeonsi APUs that share a name now count as different GPUs.
